@@ -1,0 +1,58 @@
+{
+  "timestamp": "2026-06-09T10:12:59.752Z",
+  "zca_js_version": "1.6.0",
+  "tests": {
+    "login": {
+      "status": "PASS",
+      "elapsed_ms": 203,
+      "note": "Login thành công, session active"
+    },
+    "own_id": {
+      "status": "PASS",
+      "elapsed_ms": 0,
+      "own_id": "634236733944735279",
+      "note": "Đây là userId của Agent account — dùng để detect @mention"
+    },
+    "get_groups": {
+      "status": "PASS",
+      "elapsed_ms": 78,
+      "group_count": 1,
+      "sample_ids": [
+        "6598808947011857265"
+      ]
+    },
+    "send_message": {
+      "status": "PASS",
+      "elapsed_ms": 28,
+      "group_id": "6598808947011857265"
+    },
+    "listener": {
+      "status": "PASS",
+      "duration_s": 60,
+      "messages_received": 3,
+      "agent_mentions": 0,
+      "latencies_ms": [
+        -37,
+        -40,
+        -39
+      ],
+      "avg_latency_ms": -39,
+      "p95_latency_ms": -37
+    }
+  },
+  "summary": {
+    "verdict": "GO — zca-js hoạt động, có thể build",
+    "passed_tests": "5/5",
+    "key_findings": [
+      "Agent ID: 634236733944735279",
+      "1 groups hiện có",
+      "Message latency: avg -39ms | p95 -37ms",
+      "@agent mention: chưa test (gửi \"@agent xxx\" vào group)"
+    ],
+    "recommendations": [
+      "Session cookie từ browser — cần cơ chế alert khi expire + hướng dẫn renewal",
+      "Listener dừng nếu mở Zalo Web song song — Agent cần chạy trên server riêng",
+      "Nên test: chạy listener liên tục 24h, đo thời gian expire thực tế"
+    ]
+  }
+}

@@ -1,0 +1,23 @@
+# Dependencies
+node_modules/
+
+# Environment & secrets
+.env
+.env.local
+*.local.env
+
+# Claude private files (không commit)
+.claude/CLAUDE.local.md
+.claude/settings.local.json
+.claude/memory.md
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temp files từ indexer
+/tmp/gz_*

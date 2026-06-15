@@ -1,0 +1,75 @@
+/**
+ * GiftZone AI Sales Agent
+ * Entry point — khởi động toàn bộ hệ thống
+ */
+import 'dotenv/config';
+import chalk from 'chalk';
+import { SessionManager } from './zalo/session.js';
+import { GroupListener } from './zalo/listener.js';
+import { MentionResponder } from './zalo/responder.js';
+import { startSummaryEngine } from './summary/engine.js';
+import { indexAll, startAutoSync } from './rag/indexer.js';
+import { initSchema } from './utils/db.js';
+import { loadConfig, getConfig } from './utils/config.js';
+import { createLogger } from './utils/logger.js';
+
+const log = createLogger('Main');
+
+async function main() {
+  console.log(chalk.bold.blue('\n╔══════════════════════════════════════╗'));
+  console.log(chalk.bold.blue('║   GiftZone AI Sales Agent — MVP      ║'));
+  console.log(chalk.bold.blue('╚══════════════════════════════════════╝\n'));
+
+  // 1. Khởi tạo DB schema + load config
+  log.info('Bước 1/5: Khởi tạo database schema...');
+  await initSchema();
+  await loadConfig();
+  log.info(`Config loaded — agent: ${getConfig('agent_name')}, drive: ${getConfig('drive_folder_id')}`);
+
+  // 2. Login Zalo
+  log.info('Bước 2/5: Kết nối Zalo...');
+  const session = new SessionManager();
+  session.onExpired = () => {
+    log.error('⚠️  SESSION EXPIRED — Agent dừng hoạt động. Cần cập nhật cookie và restart.');
+    process.exit(1);
+  };
+  const api = await session.login();
+
+  // 3. Index Google Drive (chạy nền, không block startup)
+  log.info('Bước 3/5: Index tài liệu Google Drive (nền)...');
+  if (getConfig('skip_index') !== 'true') {
+    indexAll()
+      .then(total => log.info(`Index Drive xong: ${total} chunks`))
+      .catch(err => log.warn(`Index Drive lỗi: ${err.message} — Chạy "npm run index:drive" khi quota reset`));
+  } else {
+    log.info('SKIP_INDEX=true — bỏ qua index Drive lúc startup');
+  }
+
+  // 4. Khởi động listener + responder
+  log.info('Bước 4/5: Khởi động Zalo listener...');
+  const responder = new MentionResponder(api);
+  const listener = new GroupListener(api, session.ownId);
+  listener.onMention = (ctx) => responder.handle(ctx);
+  listener.start();
+
+  // 5. Khởi động Summary Engine + Drive auto-sync
+  log.info('Bước 5/5: Khởi động Summary Engine & Drive auto-sync...');
+  startSummaryEngine(api);
+  startAutoSync().catch(err => log.warn('Auto-sync lỗi', err.message));
+
+  console.log(chalk.bold.green('\n✅ Agent đang chạy — sẵn sàng nhận @mention trong group\n'));
+  console.log(chalk.gray('   Ctrl+C để tắt'));
+
+  // Graceful shutdown
+  process.on('SIGINT', () => {
+    log.info('Shutting down...');
+    session.stop();
+    process.exit(0);
+  });
+}
+
+main().catch((err) => {
+  console.error(chalk.red('\n❌ Agent crash:'), err.message);
+  console.error(err);
+  process.exit(1);
+});

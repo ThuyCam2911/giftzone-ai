@@ -1,0 +1,49 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run *)",
+      "Bash(node *)",
+      "Bash(docker *)",
+      "Bash(git status)",
+      "Bash(git diff *)",
+      "Bash(git log *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git checkout *)",
+      "Bash(git branch *)",
+      "Bash(psql -p 5433 *)"
+    ],
+    "deny": [
+      "Bash(git push --force *)",
+      "Bash(git reset --hard *)",
+      "Bash(rm -rf *)",
+      "Bash(curl * | bash)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node -e \"const p=process.env.TOOL_INPUT_FILE_PATH||''; if(p.includes('.env')){console.error('BLOCKED: Không ghi trực tiếp vào .env — dùng hướng dẫn manual để tránh lộ credential');process.exit(1);}\"",
+            "description": "Chặn ghi đè .env files"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node -e \"const p=process.env.TOOL_INPUT_FILE_PATH||''; const fs=require('fs'); if(fs.existsSync(p)){const c=fs.readFileSync(p,'utf8'); const leaked=c.match(/zpw_sek|zpsid|GOCSPX|refresh_token.*1\\/\\//); if(leaked){console.error('WARNING: File có thể chứa credential thật — kiểm tra lại trước khi commit');}}\"",
+            "description": "Cảnh báo nếu file mới viết chứa pattern credential"
+          }
+        ]
+      }
+    ]
+  }
+}

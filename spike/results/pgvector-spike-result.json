@@ -1,0 +1,52 @@
+{
+  "timestamp": "2026-06-09T10:19:01.862Z",
+  "tests": {
+    "setup": {
+      "status": "PASS",
+      "elapsed_ms": 22
+    },
+    "bulk_insert": {
+      "status": "PASS",
+      "rows_inserted": 10000,
+      "elapsed_ms": 3092,
+      "rate_rows_per_sec": 3234
+    },
+    "search_no_index": {
+      "status": "PASS",
+      "iterations": 20,
+      "avg_ms": 32,
+      "p50_ms": 28,
+      "p95_ms": 47,
+      "max_ms": 68,
+      "verdict": "REALTIME OK"
+    },
+    "search_hnsw": {
+      "status": "PASS",
+      "index_build_ms": 14134,
+      "iterations": 20,
+      "avg_ms": 2,
+      "p50_ms": 2,
+      "p95_ms": 2,
+      "max_ms": 3,
+      "verdict": "REALTIME OK"
+    },
+    "concurrent_search": {
+      "status": "PASS",
+      "concurrency": 10,
+      "total_elapsed_ms": 33,
+      "avg_per_query_ms": 3,
+      "p95_ms": 21,
+      "verdict": "EXCELLENT — concurrent performance tốt"
+    }
+  },
+  "summary": {
+    "verdict": "GO — pgvector đủ nhanh cho realtime (<200ms p95 với HNSW)",
+    "speedup_hnsw_vs_no_index": "16x nhanh hơn",
+    "recommendations": [
+      "Luôn dùng HNSW index với vector_cosine_ops",
+      "Connection pool: max 20 connections đủ cho MVP",
+      "10,000 chunks: p95 < 200ms với HNSW — OK cho realtime @agent reply",
+      "Khi scale >100k chunks: tăng ef_search và xem xét partitioning theo tenant"
+    ]
+  }
+}
