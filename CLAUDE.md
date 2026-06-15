@@ -25,8 +25,13 @@ node pgvector/pgvector-spike.js
 
 ### Infrastructure
 ```bash
-# pgvector runs on port 5433 (5432 was busy)
+# Local dev: pgvector runs on port 5433 (5432 was busy)
 docker run -d -p 5433:5432 -e POSTGRES_PASSWORD=postgres pgvector/pgvector:pg16
+
+# Production: Supabase (pgvector built-in, free tier)
+# Enable extension: SQL Editor → CREATE EXTENSION IF NOT EXISTS vector;
+# Connection: Settings → Database → Session pooler (port 5432)
+# User format: postgres.[PROJECT_REF] (required for pooler tenant routing)
 ```
 
 ## Project Status (cập nhật 2026-06-15)
@@ -41,6 +46,9 @@ docker run -d -p 5433:5432 -e POSTGRES_PASSWORD=postgres pgvector/pgvector:pg16
   - Overview page: 4 StatsCard + SessionAlert banner
   - AI Logs page: bảng paginated với filter theo date/group
   - Settings page: form edit tất cả config keys (trừ read-only), textarea cho zalo_cookie
+- **Database → Supabase**: Migrate từ local Docker pgvector sang Supabase (pgvector có sẵn); `db.js` support `DATABASE_URL` với SSL
+- **Dashboard → Vercel**: Deploy tại `giftzone-ai.vercel.app`; Root Directory = `dashboard`
+- **GitHub repo**: `github.com/ThuyCam2911/giftzone-ai` — dùng SSH remote (HTTPS bị 403 do account mismatch)
 
 ### Trạng thái từng phần
 
@@ -53,13 +61,16 @@ docker run -d -p 5433:5432 -e POSTGRES_PASSWORD=postgres pgvector/pgvector:pg16
 | Dashboard overview | ✅ Hoạt động | Đọc stats từ DB |
 | Dashboard logs | ✅ Hoạt động | Paginated, filter date/group |
 | Dashboard settings | ✅ Hoạt động | Edit config + paste zalo_cookie |
-| Deploy lên server | ❌ Chưa làm | Xem phần Deploy bên dưới |
+| Database | ✅ Supabase | pgvector enabled, schema đã tạo, Drive đã index |
+| Dashboard deploy | ✅ Vercel | `giftzone-ai.vercel.app` — đang verify |
+| Agent deploy | ❌ Chưa làm | Cần persistent server (Render/Railway/VPS) |
 
 ### Bước tiếp theo
-1. **Test end-to-end**: @mention trong group thật → verify reply không còn "Theo [1]"
-2. **Deploy**: Cần server riêng cho agent (zca-js không share process), nginx proxy cho dashboard
-3. **Deal stage tracking**: Chưa spec hóa — cần confirm với PO trước khi implement
-4. **Analytics page** (màn hình 4 trong spec): top questions, doc usage — chưa làm
+1. **Verify Dashboard Vercel**: Login thử tại `giftzone-ai.vercel.app` — nếu lỗi check Vercel Function Logs
+2. **Deploy Agent**: Render.com Background Worker hoặc Railway — agent cần persistent process 24/7
+3. **Test end-to-end production**: Agent trên server → @mention → reply → hiện trong Dashboard logs
+4. **Deal stage tracking**: Chưa spec hóa — cần confirm với PO trước khi implement
+5. **Analytics page** (màn hình 4 trong spec): top questions, doc usage — chưa làm
 
 ### Quyết định quan trọng đã chốt
 - **Không có thinking message**: UX tốt hơn trên Zalo mobile; latency Gemini đủ nhanh không cần placeholder
@@ -67,6 +78,9 @@ docker run -d -p 5433:5432 -e POSTGRES_PASSWORD=postgres pgvector/pgvector:pg16
 - **Chat model**: Đã nâng từ `gemini-1.5-flash` → `gemini-2.5-flash-lite` (nhanh hơn, miễn phí)
 - **Config qua DB**: `settings` table thay vì `.env` để Dashboard có thể cập nhật không cần restart agent (trừ zalo_cookie vẫn cần restart)
 - **Dashboard port 3001**: Tránh conflict với các service khác trên port 3000
+- **Supabase thay Docker local**: Free tier, pgvector built-in, không cần manage infrastructure; dùng Session Pooler (không phải Transaction Pooler) vì pgvector HNSW cần persistent connection
+- **`DATABASE_URL` override**: `db.js` ưu tiên `DATABASE_URL` (Supabase/production) nếu có, fallback về `PG_HOST/PORT/...` (local dev) — không cần đổi code khi switch môi trường
+- **Dashboard là regular directory, không phải submodule**: Vercel không clone git submodule không có remote → đã convert thành regular files trong root repo
 
 ---
 
@@ -120,7 +134,7 @@ npm install
 npm run dev   # port 3001
 ```
 
-ENV file: `dashboard/.env.local`
+ENV file: `dashboard/.env.local` (local dev)
 ```
 DASHBOARD_PASSWORD=...
 SESSION_SECRET=...
@@ -129,6 +143,13 @@ PG_PORT=5433
 PG_DATABASE=giftzone_agent
 PG_USER=postgres
 PG_PASSWORD=postgres
+```
+
+Vercel env vars (production):
+```
+DATABASE_URL=postgresql://postgres.[PROJECT_REF]:[PASSWORD]@aws-1-...pooler.supabase.com:5432/postgres
+DASHBOARD_PASSWORD=...
+SESSION_SECRET=...
 ```
 
 - Auth: `POST /api/auth` → cookie `gz_session`; `middleware.ts` bảo vệ tất cả routes trừ `/login`
