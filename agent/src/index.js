@@ -10,6 +10,7 @@ import { SessionManager } from './zalo/session.js';
 import { GroupListener } from './zalo/listener.js';
 import { MentionResponder } from './zalo/responder.js';
 import { startSummaryEngine } from './summary/engine.js';
+import { startDealAnalyzer } from './deal/analyzer.js';
 import { indexAll, startAutoSync } from './rag/indexer.js';
 import { initSchema } from './utils/db.js';
 import { loadConfig, getConfig } from './utils/config.js';
@@ -70,6 +71,7 @@ async function main() {
   log.info('Bước 5/5: Khởi động Summary Engine & Drive auto-sync...');
   startSummaryEngine(api);
   startAutoSync().catch(err => log.warn('Auto-sync lỗi', err.message));
+  startDealAnalyzer();
 
   // 6. Cookie extractor — cron hàng ngày lúc 3:00 sáng (không chạy lúc startup)
   cron.schedule('0 3 * * *', () => {

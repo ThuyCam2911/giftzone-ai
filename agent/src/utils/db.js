@@ -109,5 +109,33 @@ export async function initSchema() {
     process.env.ZALO_COOKIE      ?? '',
   ]);
 
+  // Bảng deals — mỗi deal là 1 khách hàng đang được tư vấn trong group
+  await query(`
+    CREATE TABLE IF NOT EXISTS deals (
+      id               BIGSERIAL PRIMARY KEY,
+      group_id         TEXT NOT NULL,
+      deal_key         TEXT UNIQUE NOT NULL,
+      customer_name    TEXT,
+      product          TEXT,
+      stage            TEXT NOT NULL DEFAULT 'Mới',
+      confidence       FLOAT DEFAULT 0.8,
+      last_analyzed_at TIMESTAMPTZ DEFAULT NOW(),
+      created_at       TIMESTAMPTZ DEFAULT NOW(),
+      updated_at       TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+
+  // Bảng deal_events — lịch sử thay đổi stage
+  await query(`
+    CREATE TABLE IF NOT EXISTS deal_events (
+      id          BIGSERIAL PRIMARY KEY,
+      deal_id     BIGINT REFERENCES deals(id) ON DELETE CASCADE,
+      from_stage  TEXT,
+      to_stage    TEXT NOT NULL,
+      evidence    TEXT,
+      detected_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+
   log.info('Schema sẵn sàng ✓');
 }
