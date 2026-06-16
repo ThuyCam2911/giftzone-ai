@@ -15,7 +15,13 @@ import { createLogger } from './logger.js';
 
 const log = createLogger('CookieExtractor');
 const require = createRequire(import.meta.url);
-const Database = require('better-sqlite3');
+
+let Database;
+try {
+  Database = require('better-sqlite3');
+} catch {
+  // better-sqlite3 không khả dụng trên server (bình thường — chỉ cần trên máy local có Chrome)
+}
 
 const CHROME_COOKIE_PATHS = [
   join(homedir(), 'Library/Application Support/Google/Chrome/Default/Network/Cookies'),
@@ -75,6 +81,11 @@ export async function extractZaloCookies() {
     copyFileSync(cookiePath, tmpPath);
   } catch (err) {
     log.error('Không copy được cookie DB:', err.message);
+    return false;
+  }
+
+  if (!Database) {
+    log.warn('better-sqlite3 không khả dụng — cookie extractor chỉ chạy trên máy local có Chrome');
     return false;
   }
 
