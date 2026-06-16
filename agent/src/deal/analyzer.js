@@ -71,7 +71,7 @@ Quy tắc xác định stage:
 Trả về JSON array (không có markdown, chỉ JSON thuần):
 [
   {
-    "deal_key": "group_id__tên_khách_viết_liền_không_dấu",
+    "deal_key": "tên_khách_viết_liền_không_dấu",
     "customer_name": "tên khách hàng",
     "product": "sản phẩm/dịch vụ quan tâm",
     "stage": "stage hiện tại",
