@@ -48,7 +48,7 @@ async function getActiveGroups() {
 
 // ─── Gọi OpenRouter để phân tích deals ───────────────────────────────────────
 async function analyzeDeals(groupId, messages) {
-  if (messages.length < 3) return [];
+  if (messages.length < 5) return [];
 
   const conversation = messages
     .map(m => `[${new Date(m.msg_ts).toLocaleTimeString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })}] ${m.sender_name}: ${m.content}`)
@@ -170,7 +170,7 @@ async function runAnalysis() {
       log.error(`Lỗi phân tích group ${groupId}:`, err.message);
     }
     // Tránh 429 rate limit trên OpenRouter free tier
-    await new Promise(r => setTimeout(r, 10000));
+    await new Promise(r => setTimeout(r, 30000));
   }
   log.info('Phân tích deals hoàn tất');
 }
