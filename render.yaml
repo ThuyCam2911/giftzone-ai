@@ -1,10 +1,11 @@
 services:
-  - type: worker
+  - type: web
     name: giftzone-agent
     runtime: node
     rootDir: agent
     buildCommand: npm install
     startCommand: npm start
+    plan: free
     envVars:
       - key: NODE_ENV
         value: production
@@ -12,6 +13,8 @@ services:
         value: "false"
       - key: LOG_LEVEL
         value: info
+      - key: AGENT_NAME
+        value: GiftZone AI
       # Các biến sau cần nhập tay trên Render dashboard:
       - key: ZALO_IMEI
         sync: false
@@ -31,5 +34,3 @@ services:
         sync: false
       - key: DATABASE_URL
         sync: false
-      - key: AGENT_NAME
-        value: GiftZone AI

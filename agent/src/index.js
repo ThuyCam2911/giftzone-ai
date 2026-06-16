@@ -4,6 +4,7 @@
  */
 import 'dotenv/config';
 import chalk from 'chalk';
+import { createServer } from 'http';
 import { SessionManager } from './zalo/session.js';
 import { GroupListener } from './zalo/listener.js';
 import { MentionResponder } from './zalo/responder.js';
@@ -71,6 +72,13 @@ async function main() {
 
   console.log(chalk.bold.green('\n✅ Agent đang chạy — sẵn sàng nhận @mention trong group\n'));
   console.log(chalk.gray('   Ctrl+C để tắt'));
+
+  // HTTP health endpoint — giữ Render Free tier không bị sleep
+  const PORT = process.env.PORT || 3000;
+  createServer((req, res) => {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ status: 'ok', agent: getConfig('agent_name') }));
+  }).listen(PORT, () => log.info(`Health endpoint: http://localhost:${PORT}`));
 
   // Graceful shutdown
   process.on('SIGINT', () => {
