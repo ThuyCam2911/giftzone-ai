@@ -12,6 +12,8 @@ import { indexAll, startAutoSync } from './rag/indexer.js';
 import { initSchema } from './utils/db.js';
 import { loadConfig, getConfig } from './utils/config.js';
 import { createLogger } from './utils/logger.js';
+import { extractZaloCookies } from './utils/cookie-extractor.js';
+import cron from 'node-cron';
 
 const log = createLogger('Main');
 
@@ -56,6 +58,16 @@ async function main() {
   log.info('Bước 5/5: Khởi động Summary Engine & Drive auto-sync...');
   startSummaryEngine(api);
   startAutoSync().catch(err => log.warn('Auto-sync lỗi', err.message));
+
+  // 6. Cookie extractor — cron hàng ngày lúc 3:00 sáng (không chạy lúc startup)
+  cron.schedule('0 3 * * *', () => {
+    log.info('[CookieCron] Đang refresh Zalo cookie từ Chrome...');
+    extractZaloCookies()
+      .then(ok => ok
+        ? log.info('[CookieCron] ✅ Refresh cookie thành công')
+        : log.warn('[CookieCron] ⚠️ Refresh cookie thất bại — kiểm tra Chrome đã mở chat.zalo.me chưa'))
+      .catch(err => log.error('[CookieCron] Lỗi:', err.message));
+  }, { timezone: 'Asia/Ho_Chi_Minh' });
 
   console.log(chalk.bold.green('\n✅ Agent đang chạy — sẵn sàng nhận @mention trong group\n'));
   console.log(chalk.gray('   Ctrl+C để tắt'));
