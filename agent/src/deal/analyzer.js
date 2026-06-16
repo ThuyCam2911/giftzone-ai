@@ -11,7 +11,7 @@ import { createLogger } from '../utils/logger.js';
 const log = createLogger('DealAI');
 
 const STAGES = ['Mới', 'Tư vấn', 'Thương lượng', 'Chờ chốt', 'Đã chốt', 'Thất bại'];
-const MODEL = 'meta-llama/llama-3.3-70b-instruct:free';
+const MODEL = 'nvidia/nemotron-3-super-120b-a12b:free';
 
 function getClient() {
   const apiKey = process.env.OPENROUTER_API_KEY;
