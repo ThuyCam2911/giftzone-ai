@@ -67,8 +67,8 @@ async function getOverview() {
   for (let i = 6; i >= 0; i--) {
     const d = new Date();
     d.setDate(d.getDate() - i);
-    const key = d.toISOString().slice(0, 10);
-    days7.push({ label: d.toLocaleDateString('vi-VN', { weekday: 'short' }), count: chartMap[key] ?? 0 });
+    const key = d.toLocaleDateString('sv-SE', { timeZone: 'Asia/Ho_Chi_Minh' }); // sv-SE cho định dạng YYYY-MM-DD
+    days7.push({ label: d.toLocaleDateString('vi-VN', { weekday: 'short', timeZone: 'Asia/Ho_Chi_Minh' }), count: chartMap[key] ?? 0 });
   }
 
   return {
@@ -234,7 +234,7 @@ export default async function OverviewPage() {
                         style={{ borderBottom: i < data.recentQueries.length - 1 ? '1px solid #f3f4f6' : 'none' }}>
                         <span className="text-[10px] shrink-0 mt-0.5 font-medium"
                           style={{ color: '#02AD64' }}>
-                          {new Date(r.created_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
+                          {new Date(r.created_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Ho_Chi_Minh' })}
                         </span>
                         <p className="text-xs flex-1 leading-snug" style={{ color: '#374151' }}>{r.query}</p>
                         <span className="text-[10px] shrink-0 px-1.5 py-0.5 rounded font-medium"
