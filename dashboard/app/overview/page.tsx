@@ -85,13 +85,15 @@ export default async function OverviewPage() {
   let data;
   try {
     data = await getOverview();
-  } catch {
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
     return (
       <div className="flex min-h-screen">
         <Sidebar />
         <main className="flex-1 p-8">
           <div className="bg-red-50 border border-red-200 rounded-xl p-6 text-red-800">
             <p className="font-medium">Không kết nối được database.</p>
+            <p className="text-sm mt-2 font-mono break-all">{msg}</p>
           </div>
         </main>
       </div>
