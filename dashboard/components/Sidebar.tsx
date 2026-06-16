@@ -1,4 +1,5 @@
 'use client';
+import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 
@@ -13,76 +14,119 @@ const nav = [
 export default function Sidebar() {
   const pathname = usePathname();
   const router   = useRouter();
+  const [open, setOpen] = useState(false);
 
   async function logout() {
     await fetch('/api/auth', { method: 'DELETE' });
     router.push('/login');
   }
 
-  return (
-    <aside className="w-56 shrink-0 flex flex-col min-h-screen"
-      style={{ background: '#fff', borderRight: '1px solid #e5e7eb' }}>
+  const activeStyle = {
+    background: '#e6f9f1', color: '#018a4e',
+    borderLeft: '3px solid #02AD64', paddingLeft: '9px',
+  };
+  const inactiveStyle = { color: '#6b7280', borderLeft: '3px solid transparent', paddingLeft: '9px' };
 
-      {/* Logo area */}
-      <div className="px-5 py-6" style={{
-        background: 'linear-gradient(135deg, #02AD64 0%, #018a4e 100%)',
-      }}>
-        <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg flex items-center justify-center text-lg"
-            style={{ background: 'rgba(255,255,255,0.2)' }}>
-            🎁
-          </div>
-          <div>
-            <p className="font-bold text-white text-sm leading-tight">GiftZone</p>
-            <p className="text-xs leading-tight" style={{ color: 'rgba(255,255,255,0.75)' }}>
-              AI Dashboard
-            </p>
-          </div>
+  return (
+    <>
+      {/* ── Mobile top bar ── */}
+      <header className="md:hidden fixed top-0 left-0 right-0 z-30 flex items-center justify-between px-4 h-14 bg-white border-b border-gray-200">
+        <div className="flex items-center gap-2">
+          <span className="text-xl">🎁</span>
+          <span className="font-bold text-sm text-gray-800">GiftZone</span>
+        </div>
+        <button
+          onClick={() => setOpen(o => !o)}
+          className="p-2 rounded-lg text-gray-500 hover:bg-gray-100"
+          aria-label="Menu"
+        >
+          {open ? '✕' : '☰'}
+        </button>
+      </header>
+
+      {/* ── Mobile drawer overlay ── */}
+      {open && (
+        <div
+          className="md:hidden fixed inset-0 z-20 bg-black/30"
+          onClick={() => setOpen(false)}
+        />
+      )}
+
+      {/* ── Mobile drawer ── */}
+      <div className={`md:hidden fixed top-14 left-0 bottom-0 z-20 w-56 bg-white border-r border-gray-200 transition-transform duration-200 ${open ? 'translate-x-0' : '-translate-x-full'}`}>
+        <nav className="flex-1 px-3 py-4 space-y-0.5">
+          {nav.map(item => {
+            const active = pathname.startsWith(item.href);
+            return (
+              <Link key={item.href} href={item.href}
+                onClick={() => setOpen(false)}
+                className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium"
+                style={active ? activeStyle : inactiveStyle}
+              >
+                <span className="text-base">{item.icon}</span>
+                {item.label}
+              </Link>
+            );
+          })}
+        </nav>
+        <div className="px-3 py-4 border-t border-gray-100">
+          <button onClick={logout}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-gray-400 hover:bg-red-50 hover:text-red-500 transition-colors">
+            <span>🚪</span> Đăng xuất
+          </button>
         </div>
       </div>
 
-      {/* Nav */}
-      <nav className="flex-1 px-3 py-4 space-y-0.5">
-        {nav.map(item => {
-          const active = pathname.startsWith(item.href);
-          return (
-            <Link key={item.href} href={item.href}
-              className="nav-item flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium"
-              style={active ? {
-                background: '#e6f9f1',
-                color: '#018a4e',
-                borderLeft: '3px solid #02AD64',
-                paddingLeft: '9px',
-              } : {
-                color: '#6b7280',
-                borderLeft: '3px solid transparent',
-                paddingLeft: '9px',
-              }}
-            >
-              <span className="text-base">{item.icon}</span>
-              {item.label}
-            </Link>
-          );
-        })}
-      </nav>
+      {/* ── Desktop sidebar ── */}
+      <aside className="hidden md:flex w-56 shrink-0 flex-col min-h-screen"
+        style={{ background: '#fff', borderRight: '1px solid #e5e7eb' }}>
 
-      {/* Footer */}
-      <div className="px-3 py-4" style={{ borderTop: '1px solid #f3f4f6' }}>
-        <button onClick={logout}
-          className="nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm"
-          style={{ color: '#9ca3af' }}
-          onMouseEnter={e => {
-            (e.currentTarget as HTMLElement).style.background = '#fef2f2';
-            (e.currentTarget as HTMLElement).style.color = '#ef4444';
-          }}
-          onMouseLeave={e => {
-            (e.currentTarget as HTMLElement).style.background = 'transparent';
-            (e.currentTarget as HTMLElement).style.color = '#9ca3af';
-          }}
-        >
-          <span>🚪</span> Đăng xuất
-        </button>
-      </div>
-    </aside>
+        <div className="px-5 py-6"
+          style={{ background: 'linear-gradient(135deg, #02AD64 0%, #018a4e 100%)' }}>
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center text-lg"
+              style={{ background: 'rgba(255,255,255,0.2)' }}>
+              🎁
+            </div>
+            <div>
+              <p className="font-bold text-white text-sm leading-tight">GiftZone</p>
+              <p className="text-xs leading-tight" style={{ color: 'rgba(255,255,255,0.75)' }}>AI Dashboard</p>
+            </div>
+          </div>
+        </div>
+
+        <nav className="flex-1 px-3 py-4 space-y-0.5">
+          {nav.map(item => {
+            const active = pathname.startsWith(item.href);
+            return (
+              <Link key={item.href} href={item.href}
+                className="nav-item flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium"
+                style={active ? activeStyle : inactiveStyle}
+              >
+                <span className="text-base">{item.icon}</span>
+                {item.label}
+              </Link>
+            );
+          })}
+        </nav>
+
+        <div className="px-3 py-4" style={{ borderTop: '1px solid #f3f4f6' }}>
+          <button onClick={logout}
+            className="nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm"
+            style={{ color: '#9ca3af' }}
+            onMouseEnter={e => {
+              (e.currentTarget as HTMLElement).style.background = '#fef2f2';
+              (e.currentTarget as HTMLElement).style.color = '#ef4444';
+            }}
+            onMouseLeave={e => {
+              (e.currentTarget as HTMLElement).style.background = 'transparent';
+              (e.currentTarget as HTMLElement).style.color = '#9ca3af';
+            }}
+          >
+            <span>🚪</span> Đăng xuất
+          </button>
+        </div>
+      </aside>
+    </>
   );
 }

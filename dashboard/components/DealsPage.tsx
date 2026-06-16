@@ -3,11 +3,18 @@
 import { useState, useTransition } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 
-const STAGES = ['Mới', 'Tư vấn', 'Thương lượng', 'Chờ chốt', 'Đã chốt', 'Thất bại'];
-
+// Stage color maps — outside component to avoid re-creation on every render
 const STAGE_DOT: Record<string, string> = {
   'Mới': '#38bdf8', 'Tư vấn': '#4ade80', 'Thương lượng': '#fbbf24',
   'Chờ chốt': '#f59e0b', 'Đã chốt': '#02AD64', 'Thất bại': '#f87171',
+};
+const STAGE_TEXT: Record<string, string> = {
+  'Mới': '#0369a1', 'Tư vấn': '#15803d', 'Thương lượng': '#b45309',
+  'Chờ chốt': '#92400e', 'Đã chốt': '#166534', 'Thất bại': '#991b1b',
+};
+const STAGE_BG: Record<string, string> = {
+  'Mới': '#f0f9ff', 'Tư vấn': '#f0fdf4', 'Thương lượng': '#fffbeb',
+  'Chờ chốt': '#fef3c7', 'Đã chốt': '#dcfce7', 'Thất bại': '#fef2f2',
 };
 
 interface GroupStat {
@@ -37,11 +44,6 @@ interface Props {
   dateTo: string;
 }
 
-function formatShortDate(d: string) {
-  const dt = new Date(d);
-  return dt.toLocaleDateString('vi-VN', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Asia/Ho_Chi_Minh' });
-}
-
 function ConfDot({ value }: { value: number }) {
   const pct = Math.round(value * 100);
   const color = pct >= 80 ? '#02AD64' : pct >= 60 ? '#f59e0b' : '#ef4444';
@@ -52,7 +54,6 @@ export default function DealsPage({ stats, groupStats, events, aiInsight, dateFr
   const router = useRouter();
   const searchParams = useSearchParams();
   const [, startTransition] = useTransition();
-
   const [from, setFrom] = useState(dateFrom);
   const [to, setTo] = useState(dateTo);
 
@@ -63,42 +64,26 @@ export default function DealsPage({ stats, groupStats, events, aiInsight, dateFr
     startTransition(() => router.push(`/deals?${p.toString()}`));
   }
 
-  const STAGE_COLOR_TEXT: Record<string, string> = {
-    'Mới': '#0369a1', 'Tư vấn': '#15803d', 'Thương lượng': '#b45309',
-    'Chờ chốt': '#92400e', 'Đã chốt': '#166534', 'Thất bại': '#991b1b',
-  };
-  const STAGE_BG: Record<string, string> = {
-    'Mới': '#f0f9ff', 'Tư vấn': '#f0fdf4', 'Thương lượng': '#fffbeb',
-    'Chờ chốt': '#fef3c7', 'Đã chốt': '#dcfce7', 'Thất bại': '#fef2f2',
-  };
-
   return (
     <>
       {/* ── Header ── */}
-      <div className="flex items-start justify-between mb-2">
+      <div className="flex flex-col gap-3 mb-4 sm:flex-row sm:items-start sm:justify-between sm:gap-0 sm:mb-2">
         <div>
-          <h1 className="text-lg font-bold text-gray-900">
-            Deal Intelligence — Hoạt động & Chuyển đổi
-          </h1>
+          <h1 className="text-lg font-bold text-gray-900">Theo dõi deals — Tự động từ Zalo</h1>
           <p className="text-sm text-gray-500 mt-0.5">
-            Tự động phân tích hội thoại Zalo · cập nhật mỗi 15 phút
+            Agent đọc hội thoại và tự phân loại deals · cập nhật mỗi 15 phút
           </p>
         </div>
         {/* Date range picker */}
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
           <input
-            type="date"
-            value={from}
-            onChange={e => setFrom(e.target.value)}
-            className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 text-gray-700 focus:outline-none focus:ring-2"
-            style={{ '--tw-ring-color': '#02AD64' } as React.CSSProperties}
+            type="date" value={from} onChange={e => setFrom(e.target.value)}
+            className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 text-gray-700 focus:outline-none focus:ring-2 focus:ring-green-400"
           />
           <span className="text-gray-400 text-sm">—</span>
           <input
-            type="date"
-            value={to}
-            onChange={e => setTo(e.target.value)}
-            className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 text-gray-700 focus:outline-none focus:ring-2"
+            type="date" value={to} onChange={e => setTo(e.target.value)}
+            className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 text-gray-700 focus:outline-none focus:ring-2 focus:ring-green-400"
           />
           <button
             onClick={applyFilter}
@@ -112,25 +97,21 @@ export default function DealsPage({ stats, groupStats, events, aiInsight, dateFr
 
       {/* ── Info banner ── */}
       <div className="mb-6 px-4 py-2.5 rounded-lg border border-blue-100 bg-blue-50 text-sm text-blue-700">
-        <span className="font-medium">Chỉ hiển thị thống kê.</span>{' '}
-        Dữ liệu lấy từ{' '}
-        <span className="font-semibold">Deal Intelligence Engine</span>{' '}
-        (phân tích mỗi 15 phút). Dashboard không lắng nghe hội thoại trực tiếp — chỉ đọc kết quả đã tổng hợp.
+        Dữ liệu được tổng hợp tự động từ hội thoại Zalo, không phải real-time.{' '}
+        <span className="font-medium">Kết quả phản ánh lần phân tích gần nhất.</span>
       </div>
 
       {/* ── KPI cards ── */}
-      <div className="grid grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         {[
-          { label: 'Tổng deals phát hiện', value: stats.total, icon: '📋', color: '#6366f1', src: 'deals table' },
-          { label: 'Đang active', value: stats.active, icon: '🔥', color: '#FF6900', src: 'deals table' },
-          { label: 'Đã chốt', value: stats.closed, icon: '✅', color: '#02AD64', src: 'deals table' },
+          { label: 'Deals phát hiện',     value: stats.total,  icon: '📋', color: '#6366f1' },
+          { label: 'Đang theo dõi',       value: stats.active, icon: '🔥', color: '#FF6900' },
+          { label: 'Đã chốt thành công',  value: stats.closed, icon: '✅', color: '#02AD64' },
           {
-            label: 'Confidence TB',
+            label: 'Độ tin cậy TB',
             value: stats.avgConf > 0 ? `${Math.round(stats.avgConf * 100)}` : '—',
             suffix: stats.avgConf > 0 ? '/100' : '',
-            icon: '🎯',
-            color: '#f59e0b',
-            src: 'deal analyzer',
+            icon: '🎯', color: '#f59e0b',
           },
         ].map(card => (
           <div key={card.label} className="bg-white rounded-xl border border-gray-200 p-4">
@@ -144,7 +125,7 @@ export default function DealsPage({ stats, groupStats, events, aiInsight, dateFr
               {card.value}
               {'suffix' in card && <span className="text-sm font-normal text-gray-400">{card.suffix}</span>}
             </p>
-            <p className="text-xs text-gray-400 mt-1">src · {card.src}</p>
+            <p className="text-xs text-gray-400 mt-1">src · phân tích AI</p>
           </div>
         ))}
       </div>
@@ -152,101 +133,103 @@ export default function DealsPage({ stats, groupStats, events, aiInsight, dateFr
       {/* ── Table by group ── */}
       <div className="mb-6">
         <div className="flex items-center justify-between mb-3">
-          <h2 className="text-sm font-semibold text-gray-700">Hoạt động theo nhóm Zalo</h2>
-          <span className="text-xs text-gray-400">nguồn: deal intelligence engine</span>
+          <h2 className="text-sm font-semibold text-gray-700">Deals theo nhóm chat</h2>
+          <span className="text-xs text-gray-400 hidden sm:block">tự động · cập nhật mỗi 15 phút</span>
         </div>
 
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
           {groupStats.length === 0 ? (
-            <div className="py-14 text-center">
+            <div className="py-14 text-center px-4">
               <div className="text-3xl mb-2">🔍</div>
-              <p className="text-sm text-gray-500 font-medium">Chưa có deal nào trong khoảng thời gian này</p>
-              <p className="text-xs text-gray-400 mt-1">Agent sẽ phân tích tự động mỗi 15 phút</p>
+              <p className="text-sm text-gray-500 font-medium">Chưa phát hiện deal nào</p>
+              <p className="text-xs text-gray-400 mt-1 max-w-xs mx-auto">
+                Agent đang lắng nghe — deals sẽ xuất hiện tại đây khi được phát hiện từ hội thoại.
+              </p>
             </div>
           ) : (
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50 border-b border-gray-200">
-                <tr>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">NHÓM / GROUP ID</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">TỔNG DEALS</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">STAGE PHỔ BIẾN</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">CONFIDENCE TB</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">ĐÃ CHỐT</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">CẢNH BÁO</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {groupStats.map(g => {
-                  const lowConf = g.avg_confidence < 0.6;
-                  const stalled = g.active_deals > 3 && g.closed_deals === 0;
-                  return (
-                    <tr key={g.group_id} className="hover:bg-gray-50">
-                      <td className="px-4 py-3 font-medium text-gray-800">
-                        <span className="font-mono text-xs text-gray-400">···</span>
-                        {g.group_id.slice(-8)}
-                      </td>
-                      <td className="px-4 py-3 text-gray-700">{g.total_deals}</td>
-                      <td className="px-4 py-3">
-                        {g.top_stage ? (
-                          <span className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full"
-                            style={{
-                              background: STAGE_BG[g.top_stage] ?? '#f9fafb',
-                              color: STAGE_COLOR_TEXT[g.top_stage] ?? '#374151',
-                            }}>
-                            <span className="w-1.5 h-1.5 rounded-full"
-                              style={{ background: STAGE_DOT[g.top_stage] ?? '#9ca3af' }} />
-                            {g.top_stage}
-                          </span>
-                        ) : '—'}
-                      </td>
-                      <td className="px-4 py-3">
-                        <ConfDot value={g.avg_confidence} />
-                        <span className="text-gray-400 text-xs">/100</span>
-                      </td>
-                      <td className="px-4 py-3 text-gray-700">{g.closed_deals}</td>
-                      <td className="px-4 py-3">
-                        {lowConf ? (
-                          <span className="text-xs px-2.5 py-1 rounded-full font-medium"
-                            style={{ background: '#fef3c7', color: '#b45309' }}>
-                            confidence thấp
-                          </span>
-                        ) : stalled ? (
-                          <span className="text-xs px-2.5 py-1 rounded-full font-medium"
-                            style={{ background: '#fef2f2', color: '#b91c1c' }}>
-                            nhiều deal tồn đọng
-                          </span>
-                        ) : (
-                          <span className="text-gray-300">—</span>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm min-w-[560px]">
+                <thead className="bg-gray-50 border-b border-gray-200">
+                  <tr>
+                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">NHÓM</th>
+                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">DEALS</th>
+                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">GIAI ĐOẠN</th>
+                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">ĐỘ TIN CẬY</th>
+                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">CHỐT</th>
+                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">CẢNH BÁO</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {groupStats.map(g => {
+                    const lowConf = g.avg_confidence < 0.6;
+                    const stalled = g.active_deals > 3 && g.closed_deals === 0;
+                    return (
+                      <tr key={g.group_id} className="hover:bg-gray-50">
+                        <td className="px-4 py-3 font-medium text-gray-800">
+                          <span className="font-mono text-xs text-gray-400">···</span>
+                          {g.group_id.slice(-8)}
+                        </td>
+                        <td className="px-4 py-3 text-gray-700">{g.total_deals}</td>
+                        <td className="px-4 py-3">
+                          {g.top_stage ? (
+                            <span className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full"
+                              style={{
+                                background: STAGE_BG[g.top_stage] ?? '#f9fafb',
+                                color: STAGE_TEXT[g.top_stage] ?? '#374151',
+                              }}>
+                              <span className="w-1.5 h-1.5 rounded-full"
+                                style={{ background: STAGE_DOT[g.top_stage] ?? '#9ca3af' }} />
+                              {g.top_stage}
+                            </span>
+                          ) : '—'}
+                        </td>
+                        <td className="px-4 py-3">
+                          <ConfDot value={g.avg_confidence} />
+                          <span className="text-gray-400 text-xs">/100</span>
+                        </td>
+                        <td className="px-4 py-3 text-gray-700">{g.closed_deals}</td>
+                        <td className="px-4 py-3">
+                          {lowConf ? (
+                            <span className="text-xs px-2.5 py-1 rounded-full font-medium"
+                              style={{ background: '#fef3c7', color: '#b45309' }}>
+                              cần xem lại
+                            </span>
+                          ) : stalled ? (
+                            <span className="text-xs px-2.5 py-1 rounded-full font-medium"
+                              style={{ background: '#fef2f2', color: '#b91c1c' }}>
+                              đang tồn đọng
+                            </span>
+                          ) : (
+                            <span className="text-gray-300">—</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
       </div>
 
       {/* ── Bottom: AI Insight + Activity ── */}
-      <div className="grid grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* AI Insight */}
         <div className="rounded-xl border border-indigo-100 overflow-hidden">
           <div className="flex items-center gap-2 px-4 py-3 border-b border-indigo-100"
             style={{ background: 'linear-gradient(135deg, #6366f108, #8b5cf608)' }}>
-            <span className="text-indigo-500 text-xs font-semibold tracking-wide">✦ AI INSIGHT</span>
+            <span className="text-indigo-500 text-xs font-semibold tracking-wide">✦ Nhận xét tự động</span>
           </div>
           <div className="p-4 bg-white">
             {aiInsight ? (
               <>
                 <p className="text-sm text-gray-700 leading-relaxed">{aiInsight}</p>
-                <p className="text-xs text-gray-400 mt-3">Sinh bởi AI · dữ liệu: deal_intelligence</p>
+                <p className="text-xs text-gray-400 mt-3">Tự động · dữ liệu từ hội thoại Zalo</p>
               </>
-            ) : groupStats.length === 0 ? (
-              <p className="text-sm text-gray-400 italic">Chưa có đủ dữ liệu để tổng hợp insight.</p>
             ) : (
               <p className="text-sm text-gray-400 italic">
-                Insight sẽ được tạo tự động sau khi có đủ dữ liệu deals.
+                Chưa đủ dữ liệu — nhận xét sẽ hiện sau khi agent phân tích được ít nhất một nhóm.
               </p>
             )}
           </div>
@@ -255,12 +238,12 @@ export default function DealsPage({ stats, groupStats, events, aiInsight, dateFr
         {/* Recent activity */}
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
           <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-            <span className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Hoạt động gần đây</span>
+            <span className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Cập nhật gần đây</span>
             <span className="text-xs text-gray-400">{events.length} sự kiện</span>
           </div>
           <div className="p-4 space-y-3 max-h-64 overflow-y-auto">
             {events.length === 0 ? (
-              <p className="text-xs text-gray-400 text-center py-4">Chưa có sự kiện</p>
+              <p className="text-xs text-gray-400 text-center py-4">Chưa có thay đổi nào trong kỳ này.</p>
             ) : events.map((ev, i) => {
               const dot = STAGE_DOT[ev.to_stage] ?? '#9ca3af';
               const isNew = ev.from_stage === null;
@@ -276,7 +259,7 @@ export default function DealsPage({ stats, groupStats, events, aiInsight, dateFr
                     </p>
                     <p className="text-xs text-gray-500 mt-0.5">
                       {isNew ? (
-                        <>Deal mới · <span style={{ color: dot }}>{ev.to_stage}</span></>
+                        <>Phát hiện deal mới · <span style={{ color: dot }}>{ev.to_stage}</span></>
                       ) : (
                         <><span className="line-through text-gray-300">{ev.from_stage}</span>{' → '}
                           <span style={{ color: dot }}>{ev.to_stage}</span></>

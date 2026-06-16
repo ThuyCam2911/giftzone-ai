@@ -10,9 +10,9 @@ export default function SessionAlert({ status }: { status: string }) {
       }>
       <span className="text-lg mt-0.5">{isExpired ? '🔴' : '⚠️'}</span>
       <div>
-        <p className="font-semibold">{isExpired ? 'Session Zalo đã hết hạn.' : 'Cảnh báo: Session Zalo có thể sắp hết hạn.'}</p>
+        <p className="font-semibold">{isExpired ? 'Agent bị ngắt kết nối Zalo.' : 'Kết nối Zalo cần được làm mới.'}</p>
         <p className="mt-0.5 opacity-80">
-          Vào <code className="bg-black/10 px-1 rounded text-xs">chat.zalo.me</code> → F12 → Application → Cookies → copy toàn bộ → cập nhật <code className="bg-black/10 px-1 rounded text-xs">ZALO_COOKIE</code> trong <code className="bg-black/10 px-1 rounded text-xs">agent/.env</code> → restart agent.
+          Vào <strong>Dashboard → Cài đặt</strong> → paste Zalo cookie mới → Render Manual Deploy.
         </p>
       </div>
     </div>

@@ -131,7 +131,7 @@ export default async function Page({
   return (
     <div className="flex min-h-screen bg-gray-50">
       <Sidebar />
-      <main className="flex-1 p-8 overflow-auto">
+      <main className="flex-1 p-4 pt-18 md:pt-8 md:p-8 overflow-auto">
         <Suspense>
           <DealsPage {...data} dateFrom={from} dateTo={to} />
         </Suspense>

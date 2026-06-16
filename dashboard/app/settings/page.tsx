@@ -19,7 +19,7 @@ export default async function SettingsPage() {
   return (
     <div className="flex min-h-screen">
       <Sidebar />
-      <main className="flex-1 p-8">
+      <main className="flex-1 p-4 pt-18 md:pt-8 md:p-8">
         <div className="max-w-2xl">
           <div className="mb-6">
             <h1 className="text-xl font-bold text-gray-900">Cài đặt</h1>
