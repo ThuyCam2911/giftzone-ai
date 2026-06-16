@@ -5,7 +5,7 @@ let pool: Pool | null = null;
 function getPool(): Pool {
   if (!pool) {
     const config = process.env.DATABASE_URL
-      ? { connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } }
+      ? { connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false }, max: 2 }
       : {
           host:     process.env.PG_HOST     ?? 'localhost',
           port:     Number(process.env.PG_PORT ?? 5433),
