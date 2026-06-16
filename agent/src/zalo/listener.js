@@ -56,8 +56,8 @@ export class GroupListener {
     // Bỏ qua tin của chính Agent
     if (senderUid === this.ownId) return;
 
-    // --- Chat 1:1 (UserMessage) ---
-    if (message.type === MessageType.UserMessage) {
+    // --- Chat 1:1 (DirectMessage) ---
+    if (message.type === MessageType.DirectMessage) {
       const userId = senderUid;
       log.info(`[1:1] ${senderName} (${userId}): "${content.slice(0, 80)}"`);
 

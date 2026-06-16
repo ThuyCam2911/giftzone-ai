@@ -46,7 +46,7 @@ export class MentionResponder {
 
   async _send(threadId, text, isDirect = false) {
     try {
-      const type = isDirect ? MessageType.UserMessage : MessageType.GroupMessage;
+      const type = isDirect ? MessageType.DirectMessage : MessageType.GroupMessage;
       await this.api.sendMessage({ msg: text }, threadId, type);
     } catch (err) {
       log.error('Gửi tin thất bại', err.message);
