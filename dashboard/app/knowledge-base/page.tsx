@@ -1,4 +1,5 @@
 'use client';
+import Sidebar from '@/components/Sidebar';
 import { useEffect, useState, useRef } from 'react';
 
 interface FileRow { file_name: string; chunks: string; last_indexed: string }
@@ -51,7 +52,9 @@ export default function KnowledgeBasePage() {
   const docMax   = Math.max(...(stats?.docUsage.map(d => Number(d.count)) ?? [1]));
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="flex min-h-screen">
+      <Sidebar />
+      <div className="flex-1 p-6 space-y-6 overflow-auto">
       <div>
         <h1 className="text-lg font-semibold text-gray-900">Knowledge Base</h1>
         <p className="text-sm text-gray-500">Hỏi & truy vấn tài liệu nội bộ.</p>
@@ -198,6 +201,7 @@ export default function KnowledgeBasePage() {
             ))}
           </ul>
         </div>
+      </div>
       </div>
     </div>
   );
