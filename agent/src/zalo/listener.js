@@ -130,8 +130,9 @@ export class GroupListener {
          VALUES ($1, $2, $3, $4, $5)`,
         [groupId, senderUid, senderName, content, ts]
       );
+      log.debug(`Logged message from ${senderName} in ${groupId}`);
     } catch (err) {
-      log.error('Lưu message DB lỗi', err.message);
+      log.error('Lưu message DB lỗi:', err.message, '| group:', groupId, '| user:', senderUid);
     }
   }
 }
