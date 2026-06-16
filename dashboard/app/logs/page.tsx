@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import Sidebar from '@/components/Sidebar';
 import { query } from '@/lib/db';
 
