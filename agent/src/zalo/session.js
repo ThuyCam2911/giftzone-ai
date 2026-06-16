@@ -32,15 +32,16 @@ export class SessionManager {
   async login() {
     log.info('Đang login...');
     // Ưu tiên cookie từ DB; nếu có INSTANCE_ID thì dùng key riêng (tránh ghi đè giữa 2 instance)
+    // ENV luôn thắng DB — tránh stale DB cookie override fresh ENV cookie khi deploy
     const cookieKey = process.env.INSTANCE_ID ? `zalo_cookie_${process.env.INSTANCE_ID}` : 'zalo_cookie';
-    const rawCookie = getConfig(cookieKey, null) || getConfig('zalo_cookie', null) || process.env.ZALO_COOKIE;
+    const rawCookie = process.env.ZALO_COOKIE || getConfig(cookieKey, null) || getConfig('zalo_cookie', null);
     const credentials = {
       imei:      process.env.ZALO_IMEI,
       cookie:    parseCookie(rawCookie),
       userAgent: process.env.ZALO_USER_AGENT,
     };
 
-    const source = getConfig(cookieKey, null) ? `DB[${cookieKey}]` : getConfig('zalo_cookie', null) ? 'DB[zalo_cookie]' : 'ENV';
+    const source = process.env.ZALO_COOKIE ? 'ENV' : getConfig(cookieKey, null) ? `DB[${cookieKey}]` : 'DB[zalo_cookie]';
     log.info(`Cookie source: ${source}, IMEI: ${credentials.imei?.slice(0, 8)}...`);
 
     const zalo = new Zalo(credentials, { selfListen: false, checkUpdate: false });
