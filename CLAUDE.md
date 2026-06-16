@@ -51,7 +51,9 @@ docker run -d -p 5433:5432 -e POSTGRES_PASSWORD=postgres pgvector/pgvector:pg16
   - Settings: edit config keys + textarea zalo_cookie
   - Design: brand colors `#02AD64` (xanh) + `#FF6900` (cam), sidebar gradient, card shadows, pulse animation
 - **Database**: Supabase (pgvector built-in, free tier); Session Pooler port 5432
-- **Agent deploy**: Render.com Free Web Service tại `giftzone-ai.onrender.com`; HTTP health endpoint `/` để giữ không bị sleep; cron-job.org ping mỗi 14 phút
+- **2 Render services**: `giftzone-ai` (Sales AI, account 1) + `giftzone-deal-monitor` (Deal Monitor, account 2)
+- **Deal Analyzer**: cron 15 phút, OpenRouter `meta-llama/llama-3.3-70b-instruct:free`, detect deal stage từ messages
+- **`SKIP_ZALO` env var**: khi `true` bỏ qua toàn bộ Zalo login/listener — dùng cho deal-monitor nếu không cần Zalo connection
 
 ### Trạng thái từng phần
 
@@ -59,11 +61,13 @@ docker run -d -p 5433:5432 -e POSTGRES_PASSWORD=postgres pgvector/pgvector:pg16
 |------|-----------|---------|
 | Agent RAG | ✅ Production | Model: `gemini-2.5-flash-lite`, dim 1536 |
 | Agent reply format | ✅ | Không thinking msg, không source citation |
-| Chat 1:1 Zalo | ✅ Production | `MessageType.DirectMessage`, không cần @mention |
-| Chat group @mention | ✅ Production | Vẫn cần @mention trong group |
+| Chat 1:1 Zalo | ✅ Code | `MessageType.DirectMessage`, không cần @mention |
+| Chat group @mention | ✅ Code | Vẫn cần @mention trong group |
 | Agent summary engine | ✅ | Cron 18:00 T2-T6, `gemini-1.5-flash` |
 | Cookie auto-refresh | ✅ | Cron 3AM, đọc Chrome SQLite; chỉ chạy trên máy local có Chrome |
-| Agent deploy | ✅ Render | `giftzone-ai.onrender.com`, Free Web Service + cron-job.org ping |
+| Deal Analyzer | ✅ Code | Cron 15 phút, llama-3.3-70b, lưu vào `deals` table |
+| Agent deploy giftzone-ai | ❌ Broken | Cookie mới update từ local VN không dùng được từ Render US — cần revert cookie cũ |
+| Agent deploy giftzone-deal-monitor | ❌ Broken | Cùng vấn đề cookie IP; SKIP_ZALO=true tạm thời fix được deal analyzer nhưng không nghe Zalo |
 | Dashboard auth | ✅ | Simple password, cookie-based |
 | Dashboard overview | ✅ | Chart 7 ngày, health, top questions, force-dynamic |
 | Dashboard logs | ✅ | Paginated, filter date/group |
@@ -72,13 +76,14 @@ docker run -d -p 5433:5432 -e POSTGRES_PASSWORD=postgres pgvector/pgvector:pg16
 | Database | ✅ Supabase | pgvector enabled, schema sẵn sàng |
 | Dashboard deploy | ✅ Vercel | `giftzone-ai.vercel.app` |
 | Analytics page (spec §5.3) | ⏳ Chưa làm | Top questions đã có trong Overview/KB; full analytics page chưa |
-| Deal stage tracking | ⏳ Chưa làm | Cần confirm spec với PO |
+| Deal stage tracking UI | ⏳ Chưa làm | Analyzer có nhưng chưa có UI trên Dashboard |
 
 ### Bước tiếp theo
-1. **Cookie hết hạn** — khi agent báo expired: mở `chat.zalo.me` Chrome → đăng nhập → vào Dashboard Settings → paste `zalo_cookie` → Render Manual Deploy
-2. **Test cookie auto-refresh** — lần đầu cần mở `chat.zalo.me` trong Chrome để có session, sau đó cron 3AM sẽ tự refresh
-3. **Deal stage tracking** — cần confirm spec với PO trước khi implement
-4. **Analytics page** — màn hình 4 trong spec: top questions theo group, doc usage timeline
+1. **Fix giftzone-ai** — revert `ZALO_COOKIE` về giá trị cũ (trước khi update hôm nay). Cookie cũ đã được Zalo trust từ US IP. IMEI không thay đổi thì không cần revert.
+2. **Fix giftzone-deal-monitor Zalo** — session mới tạo từ local VN bị reject từ Render US. Giải pháp: dùng `SKIP_ZALO=true` + deal analyzer chạy trên data từ giftzone-ai (nếu cùng DB), HOẶC migrate sang server Vietnam/Singapore.
+3. **Kiến trúc 2 account** — giftzone-ai (account 1) trong nhóm sales nội bộ; giftzone-deal-monitor (account 2) trong nhóm sales-khách hàng. Deal-monitor cần Zalo connection riêng để log messages từ nhóm khách.
+4. **Deal stage tracking** — Deal Analyzer đã có code, cần thêm UI trên Dashboard để xem deals
+5. **Analytics page** — màn hình 4 trong spec: top questions theo group, doc usage timeline
 
 ### Quyết định quan trọng đã chốt
 - **Không có thinking message**: UX tốt hơn trên Zalo mobile; Gemini đủ nhanh
@@ -97,6 +102,9 @@ docker run -d -p 5433:5432 -e POSTGRES_PASSWORD=postgres pgvector/pgvector:pg16
 - **WeekChart là client component**: Bar chart cần hover state → phải dùng `'use client'` + `useState`; server component không thể có interactivity
 - **Dashboard là regular directory**: Vercel không clone git submodule → đã convert `dashboard/` thành regular files
 - **GitHub SSH remote**: HTTPS bị 403 do account mismatch (Thuy-Cam vs ThuyCam2911) → dùng SSH
+- **Zalo cookie IP binding**: Cookie mới tạo từ máy local VN bị Zalo reject khi gọi từ Render US IP. Cookie cũ đã được trust thì tiếp tục hoạt động. Khi update cookie: phải dùng cookie từ session đã chạy ổn định, KHÔNG tạo session mới từ local rồi paste lên Render.
+- **Deal Monitor architecture**: 2 Zalo accounts — account 1 (Sales AI) trong nhóm nội bộ sales, account 2 (Deal Monitor) trong nhóm sales-khách hàng. Deal Analyzer cron đọc messages từ DB để detect deal stage.
+- **OpenRouter model**: `meta-llama/llama-3.3-70b-instruct:free` — `nvidia/nemotron-ultra-253b-v1:free` đã bị xóa khỏi OpenRouter
 
 ---
 
