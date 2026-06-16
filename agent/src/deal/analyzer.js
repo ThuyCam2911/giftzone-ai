@@ -170,7 +170,7 @@ async function runAnalysis() {
       log.error(`Lỗi phân tích group ${groupId}:`, err.message);
     }
     // Tránh 429 rate limit trên OpenRouter free tier
-    await new Promise(r => setTimeout(r, 30000));
+    await new Promise(r => setTimeout(r, 60000));
   }
   log.info('Phân tích deals hoàn tất');
 }
