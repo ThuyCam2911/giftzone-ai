@@ -69,7 +69,11 @@ async function main() {
 
   // 5. Khởi động Summary Engine + Drive auto-sync
   log.info('Bước 5/5: Khởi động Summary Engine & Drive auto-sync...');
-  startSummaryEngine(api);
+  if (process.env.ENABLE_SUMMARY !== 'false') {
+    startSummaryEngine(api);
+  } else {
+    log.info('Summary Engine tắt (ENABLE_SUMMARY=false)');
+  }
   startAutoSync().catch(err => log.warn('Auto-sync lỗi', err.message));
 
   if (process.env.ENABLE_DEAL_ANALYSIS === 'true') {

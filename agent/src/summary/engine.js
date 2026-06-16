@@ -17,22 +17,23 @@ const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
 
 // ─── Lấy tin nhắn trong khoảng thời gian ─────────────────────────────────────
 async function fetchMessages(groupId, since) {
-  return query(
+  const result = await query(
     `SELECT sender_name, content, msg_ts
      FROM messages
      WHERE group_id = $1 AND msg_ts >= $2
      ORDER BY msg_ts ASC`,
     [groupId, since]
   );
+  return result.rows;
 }
 
 // ─── Lấy tất cả group IDs đang active ────────────────────────────────────────
 async function getActiveGroups(since) {
-  const rows = await query(
+  const result = await query(
     `SELECT DISTINCT group_id FROM messages WHERE msg_ts >= $1`,
     [since]
   );
-  return rows.map(r => r.group_id);
+  return result.rows.map(r => r.group_id);
 }
 
 // ─── Tạo summary bằng Claude ──────────────────────────────────────────────────

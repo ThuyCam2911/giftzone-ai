@@ -31,8 +31,9 @@ export class SessionManager {
 
   async login() {
     log.info('Đang login...');
-    // Ưu tiên cookie từ DB (cập nhật qua Dashboard), fallback về .env
-    const rawCookie = getConfig('zalo_cookie', null) || process.env.ZALO_COOKIE;
+    // Ưu tiên cookie từ DB; nếu có INSTANCE_ID thì dùng key riêng (tránh ghi đè giữa 2 instance)
+    const cookieKey = process.env.INSTANCE_ID ? `zalo_cookie_${process.env.INSTANCE_ID}` : 'zalo_cookie';
+    const rawCookie = getConfig(cookieKey, null) || getConfig('zalo_cookie', null) || process.env.ZALO_COOKIE;
     const credentials = {
       imei:      process.env.ZALO_IMEI,
       cookie:    parseCookie(rawCookie),
