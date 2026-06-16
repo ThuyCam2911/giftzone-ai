@@ -91,6 +91,10 @@ docker run -d -p 5433:5432 -e POSTGRES_PASSWORD=postgres pgvector/pgvector:pg16
 - **Cookie extractor safety check**: Phải có `zpsid`/`zpw_sek` và ≥3 cookies trước khi ghi DB — tránh lưu array rỗng
 - **Supabase Session Pooler**: Dùng `postgres.[PROJECT_REF]` làm username (tenant routing); không dùng Transaction Pooler vì pgvector HNSW cần persistent connection
 - **`force-dynamic` trên overview page**: Next.js App Router cache server components theo mặc định → data không cập nhật khi reload; `export const dynamic = 'force-dynamic'` fix điều này
+- **`unstable_cache` cho performance**: `force-dynamic` làm mỗi request hit DB; thêm `unstable_cache` TTL 60s (overview) và 30s (logs) để nhiều request trong cùng window dùng chung 1 DB hit
+- **Supabase pool limits**: Free tier giới hạn 15 connections; dashboard pool `max: 2`, agent pool `max: 5` — tổng tối đa 7, an toàn cho Vercel serverless (nhiều instances)
+- **Timezone display**: Vercel serverless dùng UTC, `toLocaleString()` không có `timeZone` option → giờ hiển thị sai. Fix: tất cả date/time display phải có `timeZone: 'Asia/Ho_Chi_Minh'`
+- **WeekChart là client component**: Bar chart cần hover state → phải dùng `'use client'` + `useState`; server component không thể có interactivity
 - **Dashboard là regular directory**: Vercel không clone git submodule → đã convert `dashboard/` thành regular files
 - **GitHub SSH remote**: HTTPS bị 403 do account mismatch (Thuy-Cam vs ThuyCam2911) → dùng SSH
 
@@ -177,6 +181,10 @@ SESSION_SECRET=...
 - `listener.js`: local `userQuery` var (was named `query`, shadowing the db import)
 - `responder.js`: đã bỏ thinking message và source citation suffix — reply đến thẳng từ `answer()`
 - `retriever.js` SYSTEM_PROMPT: đã bỏ "Luôn trích dẫn nguồn" và thêm "KHÔNG trích dẫn nguồn hay số thứ tự" — ngăn Gemini tự thêm "Theo [1]" trong reply
+- `summary/engine.js`: `query()` trả về array trực tiếp nhưng code dùng `const { rows } = await query()` → `rows = undefined` → summary engine crash silently từ đầu. Fix: `fetchMessages` return trực tiếp, `getActiveGroups` dùng `const rows = await query()`
+- `dashboard/app/overview/page.tsx`: PostgreSQL `DATE()` trả về Date object; chart key dùng string → không match. Fix: `new Date(r.day).toISOString().slice(0, 10)`
+- **Timezone chart key**: Sau nửa đêm VN (00:00–07:00) UTC date là ngày hôm trước → key sai. Fix: `sv-SE` locale với `timeZone: 'Asia/Ho_Chi_Minh'` cho YYYY-MM-DD keys
+- **Vercel prerender error**: Next.js App Router prerender pages với DB calls lúc build time → crash. Fix: `export const dynamic = 'force-dynamic'` trên tất cả pages có DB query (overview, logs, settings, knowledge-base)
 
 ### Environment variables (agent/.env)
 ```
