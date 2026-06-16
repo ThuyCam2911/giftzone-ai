@@ -97,8 +97,7 @@ export async function initSchema() {
       ('skip_index',        $4, 'Bỏ qua index Drive khi khởi động (true/false)'),
       ('log_level',         $5, 'Mức log: debug / info / warn / error'),
       ('session_status',    'unknown', 'Trạng thái Zalo session: ok / warning / expired / unknown'),
-      ('session_last_seen', '',        'Lần cuối session còn sống (ISO timestamp)'),
-      ('zalo_cookie',       $6,        'Zalo session cookie (JSON array từ chat.zalo.me → F12 → Application → Cookies)')
+      ('session_last_seen', '',        'Lần cuối session còn sống (ISO timestamp)')
     ON CONFLICT (key) DO NOTHING
   `, [
     process.env.DRIVE_FOLDER_ID  ?? '',
@@ -106,7 +105,6 @@ export async function initSchema() {
     process.env.AGENT_NAME       ?? 'GiftZone AI',
     process.env.SKIP_INDEX       ?? 'false',
     process.env.LOG_LEVEL        ?? 'info',
-    process.env.ZALO_COOKIE      ?? '',
   ]);
 
   // Bảng deals — mỗi deal là 1 khách hàng đang được tư vấn trong group
