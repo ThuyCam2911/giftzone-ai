@@ -40,6 +40,10 @@ export class SessionManager {
       userAgent: process.env.ZALO_USER_AGENT,
     };
 
+    log.info(`Cookie source: ${rawCookie ? 'found (' + String(rawCookie).slice(0, 30) + '...)' : 'NULL'}`);
+    log.info(`IMEI: ${credentials.imei?.slice(0, 20)}...`);
+    log.info(`UserAgent: ${credentials.userAgent?.slice(0, 40)}...`);
+
     const zalo = new Zalo(credentials, { selfListen: false, checkUpdate: false });
     this.api = await zalo.login();
     this.ownId = await this.api.getOwnId();
