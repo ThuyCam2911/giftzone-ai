@@ -3,9 +3,10 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 
 const nav = [
-  { href: '/overview', label: 'Tổng quan' },
-  { href: '/logs',     label: 'AI Logs' },
-  { href: '/settings', label: 'Cài đặt' },
+  { href: '/overview',       label: 'Tổng quan' },
+  { href: '/logs',           label: 'AI Logs' },
+  { href: '/knowledge-base', label: 'Knowledge Base' },
+  { href: '/settings',       label: 'Cài đặt' },
 ];
 
 export default function Sidebar() {
