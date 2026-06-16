@@ -5,6 +5,7 @@
 import 'dotenv/config';
 import chalk from 'chalk';
 import { createServer } from 'http';
+import { MessageType } from 'zca-js';
 import { SessionManager } from './zalo/session.js';
 import { GroupListener } from './zalo/listener.js';
 import { MentionResponder } from './zalo/responder.js';
@@ -32,8 +33,18 @@ async function main() {
   // 2. Login Zalo
   log.info('Bước 2/5: Kết nối Zalo...');
   const session = new SessionManager();
-  session.onExpired = () => {
+  session.onExpired = async () => {
     log.error('⚠️  SESSION EXPIRED — Agent dừng hoạt động. Cần cập nhật cookie và restart.');
+    const adminGroup = process.env.ZALO_TEST_GROUP_ID;
+    if (adminGroup && api) {
+      try {
+        await api.sendMessage(
+          { msg: '⚠️ GiftZone Agent: Zalo session vừa hết hạn.\nVào Dashboard Settings → paste cookie mới → Render Manual Deploy.' },
+          adminGroup,
+          MessageType.GroupMessage
+        );
+      } catch (_) { /* ignore — session đã expire, gửi có thể fail */ }
+    }
     process.exit(1);
   };
   const api = await session.login();
