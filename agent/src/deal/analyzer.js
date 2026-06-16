@@ -23,25 +23,36 @@ function getClient() {
   });
 }
 
-// ─── Lấy messages trong 24h gần nhất của group ───────────────────────────────
-async function fetchRecentMessages(groupId, sinceHours = 24) {
-  const since = new Date(Date.now() - sinceHours * 60 * 60 * 1000);
+// ─── Lấy messages mới kể từ lần analyze cuối của group ──────────────────────
+async function fetchNewMessages(groupId) {
+  // Lấy thời điểm analyze cuối của group này (từ bảng deals)
+  const lastRun = await query(
+    `SELECT MAX(last_analyzed_at) as last FROM deals WHERE group_id = $1`,
+    [groupId]
+  );
+  // Nếu chưa analyze lần nào, lấy 24h gần nhất
+  const since = lastRun.rows[0]?.last ?? new Date(Date.now() - 24 * 60 * 60 * 1000);
   const result = await query(
     `SELECT sender_name, content, msg_ts
      FROM messages
-     WHERE group_id = $1 AND msg_ts >= $2
+     WHERE group_id = $1 AND msg_ts > $2
      ORDER BY msg_ts ASC`,
     [groupId, since]
   );
   return result.rows;
 }
 
-// ─── Lấy tất cả groups có activity trong 24h ─────────────────────────────────
-async function getActiveGroups() {
-  const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+// ─── Lấy groups có message MỚI kể từ lần analyze cuối ───────────────────────
+async function getGroupsWithNewMessages() {
   const result = await query(
-    `SELECT DISTINCT group_id FROM messages WHERE msg_ts >= $1`,
-    [since]
+    `SELECT DISTINCT m.group_id
+     FROM messages m
+     LEFT JOIN (
+       SELECT group_id, MAX(last_analyzed_at) as last_run
+       FROM deals
+       GROUP BY group_id
+     ) d ON m.group_id = d.group_id
+     WHERE m.msg_ts > COALESCE(d.last_run, NOW() - INTERVAL '24 hours')`
   );
   return result.rows.map(r => r.group_id);
 }
@@ -154,13 +165,13 @@ async function upsertDeal(groupId, deal) {
 // ─── Chạy phân tích cho tất cả groups ────────────────────────────────────────
 async function runAnalysis() {
   log.info('Bắt đầu phân tích deals...');
-  const groups = await getActiveGroups();
-  if (groups.length === 0) { log.info('Không có group nào active'); return; }
+  const groups = await getGroupsWithNewMessages();
+  if (groups.length === 0) { log.info('Không có group nào có message mới'); return; }
 
-  log.info(`Phân tích ${groups.length} groups...`);
+  log.info(`Phân tích ${groups.length} groups có message mới...`);
   for (const groupId of groups) {
     try {
-      const messages = await fetchRecentMessages(groupId);
+      const messages = await fetchNewMessages(groupId);
       const deals = await analyzeDeals(groupId, messages);
       for (const deal of deals) {
         await upsertDeal(groupId, deal);
