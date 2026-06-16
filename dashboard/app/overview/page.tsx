@@ -1,5 +1,6 @@
 export const dynamic = 'force-dynamic';
 
+import { unstable_cache } from 'next/cache';
 import Sidebar from '@/components/Sidebar';
 import StatsCard from '@/components/StatsCard';
 import SessionAlert from '@/components/SessionAlert';
@@ -21,9 +22,20 @@ function timeAgo(iso: string | null): string {
   return `${Math.floor(hrs / 24)} ngày trước`;
 }
 
+const getCachedOverview = unstable_cache(
+  async (todayISO: string) => _getOverview(todayISO),
+  ['overview'],
+  { revalidate: 60, tags: ['overview'] } // cache 60 giây
+);
+
 async function getOverview() {
-  const todayStart = new Date();
-  todayStart.setHours(0, 0, 0, 0);
+  // Key theo ngày VN để cache tự reset sau nửa đêm
+  const todayISO = new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Ho_Chi_Minh' });
+  return getCachedOverview(todayISO);
+}
+
+async function _getOverview(todayISO: string) {
+  const todayStart = new Date(`${todayISO}T00:00:00+07:00`); // midnight Vietnam time
 
   const [groups, msgs, aiQueries, chunks, settings, chart, topQ, recentQ] = await Promise.all([
     query<{ count: string }>(

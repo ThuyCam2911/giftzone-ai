@@ -1,5 +1,6 @@
 export const dynamic = 'force-dynamic';
 
+import { unstable_cache } from 'next/cache';
 import Sidebar from '@/components/Sidebar';
 import { query } from '@/lib/db';
 
@@ -13,7 +14,13 @@ interface LogRow {
   created_at: string;
 }
 
-async function getLogs(page = 1) {
+const getLogs = unstable_cache(
+  async (page: number) => _getLogs(page),
+  ['logs'],
+  { revalidate: 30, tags: ['logs'] }
+);
+
+async function _getLogs(page = 1) {
   const limit = 20;
   const offset = (page - 1) * limit;
   const [rows, total] = await Promise.all([
