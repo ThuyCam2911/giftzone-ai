@@ -61,15 +61,18 @@ export class GroupListener {
       const userId = senderUid;
       log.info(`[1:1] ${senderName} (${userId}): "${content.slice(0, 80)}"`);
 
+      // Ghi vào DB để Deal Intelligence phân tích (dùng userId làm group_id)
+      await this._logMessage(userId, senderUid, senderName, content, ts);
+
       if (typeof this.onMention === 'function' && content.trim().length >= 2) {
         await this.onMention({
-          groupId:   userId,   // dùng userId làm "thread id" để log
+          groupId:   userId,
           senderUid,
           senderName,
           rawContent: content,
           query:     content.trim(),
           ts,
-          isDirect:  true,     // flag để responder dùng UserMessage khi reply
+          isDirect:  true,
         });
       }
       return;
