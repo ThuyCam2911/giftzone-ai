@@ -71,7 +71,12 @@ async function main() {
   log.info('Bước 5/5: Khởi động Summary Engine & Drive auto-sync...');
   startSummaryEngine(api);
   startAutoSync().catch(err => log.warn('Auto-sync lỗi', err.message));
-  startDealAnalyzer();
+
+  if (process.env.ENABLE_DEAL_ANALYSIS === 'true') {
+    startDealAnalyzer();
+  } else {
+    log.info('Deal Intelligence tắt (ENABLE_DEAL_ANALYSIS != true)');
+  }
 
   // 6. Cookie extractor — cron hàng ngày lúc 3:00 sáng (không chạy lúc startup)
   cron.schedule('0 3 * * *', () => {
