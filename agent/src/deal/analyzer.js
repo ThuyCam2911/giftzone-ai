@@ -11,7 +11,13 @@ import { createLogger } from '../utils/logger.js';
 const log = createLogger('DealAI');
 
 const STAGES = ['Mới', 'Tư vấn', 'Thương lượng', 'Chờ chốt', 'Đã chốt', 'Thất bại'];
-const MODEL = 'nvidia/nemotron-3-super-120b-a12b:free';
+
+// Fallback chain — thử lần lượt khi model trước bị 429
+const MODEL_CHAIN = [
+  'nvidia/nemotron-3-super-120b-a12b:free',
+  'meta-llama/llama-3.3-70b-instruct:free',
+  'mistralai/mistral-7b-instruct:free',
+];
 
 function getClient() {
   const apiKey = process.env.OPENROUTER_API_KEY;
@@ -21,6 +27,29 @@ function getClient() {
     apiKey,
     defaultHeaders: { 'X-Title': 'GiftZone Deal Intelligence' },
   });
+}
+
+async function callWithFallback(prompt) {
+  const client = getClient();
+  for (const model of MODEL_CHAIN) {
+    try {
+      const response = await client.chat.completions.create({
+        model,
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0.1,
+        max_tokens: 1500,
+      });
+      log.debug(`Model used: ${model}`);
+      return response.choices[0]?.message?.content ?? '[]';
+    } catch (err) {
+      if (err.status === 429) {
+        log.warn(`Model ${model} bị rate limit (429) — thử model tiếp theo...`);
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw new Error('Tất cả models trong fallback chain đều bị rate limit');
 }
 
 // ─── Lấy messages mới kể từ lần analyze cuối của group ──────────────────────
@@ -96,15 +125,7 @@ Nếu không phát hiện deal nào, trả về [].
 Cuộc trò chuyện (group ${groupId}):
 ${conversation.slice(0, 6000)}`;
 
-  const client = getClient();
-  const response = await client.chat.completions.create({
-    model: MODEL,
-    messages: [{ role: 'user', content: prompt }],
-    temperature: 0.1,
-    max_tokens: 1500,
-  });
-
-  const text = response.choices[0]?.message?.content ?? '[]';
+  const text = await callWithFallback(prompt);
 
   try {
     // Strip markdown code blocks nếu có
