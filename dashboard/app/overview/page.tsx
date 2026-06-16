@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import Sidebar from '@/components/Sidebar';
 import StatsCard from '@/components/StatsCard';
 import SessionAlert from '@/components/SessionAlert';
+import WeekChart from '@/components/WeekChart';
 import { query } from '@/lib/db';
 
 function formatDate(iso: string | null): string {
@@ -105,8 +106,6 @@ export default async function OverviewPage() {
     );
   }
 
-  const chartMax = Math.max(...data.days7.map(d => d.count), 1);
-
   return (
     <div className="flex min-h-screen">
       <Sidebar />
@@ -140,43 +139,8 @@ export default async function OverviewPage() {
           {/* Row 2: chart + health */}
           <div className="grid grid-cols-3 gap-4">
             {/* 7-day chart */}
-            <div className="col-span-2 bg-white rounded-2xl p-5"
-              style={{ boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
-              <p className="text-sm font-semibold mb-1" style={{ color: '#111827' }}>Hội thoại AI — 7 ngày qua</p>
-              <p className="text-xs mb-4" style={{ color: '#9ca3af' }}>Số câu hỏi được xử lý mỗi ngày</p>
-              <div className="flex items-end gap-2 h-28">
-                {data.days7.map((d, i) => {
-                  const isToday = i === 6;
-                  return (
-                    <div key={i} className="flex-1 flex flex-col items-center gap-1">
-                      <span className="text-[10px]" style={{ color: '#9ca3af' }}>{d.count || ''}</span>
-                      <div className="w-full flex items-end" style={{ height: 72 }}>
-                        <div
-                          className="w-full rounded-t transition-all duration-500"
-                          style={{
-                            height: `${d.count === 0 ? 2 : Math.max(8, (d.count / chartMax) * 72)}px`,
-                            background: isToday ? '#FF6900' : '#02AD64',
-                            opacity: d.count === 0 ? 0.2 : 1,
-                          }}
-                        />
-                      </div>
-                      <span className="text-[10px]" style={{ color: isToday ? '#FF6900' : '#9ca3af', fontWeight: isToday ? 600 : 400 }}>
-                        {d.label}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-              <div className="flex gap-4 mt-3">
-                <div className="flex items-center gap-1.5">
-                  <div className="w-2.5 h-2.5 rounded-sm" style={{ background: '#02AD64' }} />
-                  <span className="text-[10px]" style={{ color: '#9ca3af' }}>Các ngày</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <div className="w-2.5 h-2.5 rounded-sm" style={{ background: '#FF6900' }} />
-                  <span className="text-[10px]" style={{ color: '#9ca3af' }}>Hôm nay</span>
-                </div>
-              </div>
+            <div className="col-span-2">
+              <WeekChart days={data.days7} />
             </div>
 
             {/* Health */}
