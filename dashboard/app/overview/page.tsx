@@ -58,7 +58,10 @@ async function getOverview() {
   const s = Object.fromEntries(settings.map(r => [r.key, r.value]));
 
   // Build 7-day chart: fill missing days with 0
-  const chartMap = Object.fromEntries(chart.map(r => [r.day, Number(r.count)]));
+  const chartMap = Object.fromEntries(chart.map(r => [
+    new Date(r.day).toISOString().slice(0, 10),
+    Number(r.count),
+  ]));
   const days7: { label: string; count: number }[] = [];
   for (let i = 6; i >= 0; i--) {
     const d = new Date();
