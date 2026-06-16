@@ -31,50 +31,57 @@ async function main() {
   await loadConfig();
   log.info(`Config loaded — agent: ${getConfig('agent_name')}, drive: ${getConfig('drive_folder_id')}`);
 
-  // 2. Login Zalo
-  log.info('Bước 2/5: Kết nối Zalo...');
-  const session = new SessionManager();
-  session.onExpired = async () => {
-    log.error('⚠️  SESSION EXPIRED — Agent dừng hoạt động. Cần cập nhật cookie và restart.');
-    const adminGroup = process.env.ZALO_TEST_GROUP_ID;
-    if (adminGroup && api) {
-      try {
-        await api.sendMessage(
-          { msg: '⚠️ GiftZone Agent: Zalo session vừa hết hạn.\nVào Dashboard Settings → paste cookie mới → Render Manual Deploy.' },
-          adminGroup,
-          MessageType.GroupMessage
-        );
-      } catch (_) { /* ignore — session đã expire, gửi có thể fail */ }
+  const skipZalo = process.env.SKIP_ZALO === 'true';
+  let api = null;
+
+  if (skipZalo) {
+    log.info('SKIP_ZALO=true — bỏ qua kết nối Zalo (chế độ Deal Monitor)');
+  } else {
+    // 2. Login Zalo
+    log.info('Bước 2/5: Kết nối Zalo...');
+    const session = new SessionManager();
+    session.onExpired = async () => {
+      log.error('⚠️  SESSION EXPIRED — Agent dừng hoạt động. Cần cập nhật cookie và restart.');
+      const adminGroup = process.env.ZALO_TEST_GROUP_ID;
+      if (adminGroup && api) {
+        try {
+          await api.sendMessage(
+            { msg: '⚠️ GiftZone Agent: Zalo session vừa hết hạn.\nVào Dashboard Settings → paste cookie mới → Render Manual Deploy.' },
+            adminGroup,
+            MessageType.GroupMessage
+          );
+        } catch (_) { /* ignore — session đã expire, gửi có thể fail */ }
+      }
+      process.exit(1);
+    };
+    api = await session.login();
+
+    // 3. Index Google Drive (chạy nền, không block startup)
+    log.info('Bước 3/5: Index tài liệu Google Drive (nền)...');
+    if (getConfig('skip_index') !== 'true') {
+      indexAll()
+        .then(total => log.info(`Index Drive xong: ${total} chunks`))
+        .catch(err => log.warn(`Index Drive lỗi: ${err.message} — Chạy "npm run index:drive" khi quota reset`));
+    } else {
+      log.info('SKIP_INDEX=true — bỏ qua index Drive lúc startup');
     }
-    process.exit(1);
-  };
-  const api = await session.login();
 
-  // 3. Index Google Drive (chạy nền, không block startup)
-  log.info('Bước 3/5: Index tài liệu Google Drive (nền)...');
-  if (getConfig('skip_index') !== 'true') {
-    indexAll()
-      .then(total => log.info(`Index Drive xong: ${total} chunks`))
-      .catch(err => log.warn(`Index Drive lỗi: ${err.message} — Chạy "npm run index:drive" khi quota reset`));
-  } else {
-    log.info('SKIP_INDEX=true — bỏ qua index Drive lúc startup');
+    // 4. Khởi động listener + responder
+    log.info('Bước 4/5: Khởi động Zalo listener...');
+    const responder = new MentionResponder(api);
+    const listener = new GroupListener(api, session.ownId);
+    listener.onMention = (ctx) => responder.handle(ctx);
+    listener.start();
+
+    // 5. Khởi động Summary Engine + Drive auto-sync
+    log.info('Bước 5/5: Khởi động Summary Engine & Drive auto-sync...');
+    if (process.env.ENABLE_SUMMARY !== 'false') {
+      startSummaryEngine(api);
+    } else {
+      log.info('Summary Engine tắt (ENABLE_SUMMARY=false)');
+    }
+    startAutoSync().catch(err => log.warn('Auto-sync lỗi', err.message));
   }
-
-  // 4. Khởi động listener + responder
-  log.info('Bước 4/5: Khởi động Zalo listener...');
-  const responder = new MentionResponder(api);
-  const listener = new GroupListener(api, session.ownId);
-  listener.onMention = (ctx) => responder.handle(ctx);
-  listener.start();
-
-  // 5. Khởi động Summary Engine + Drive auto-sync
-  log.info('Bước 5/5: Khởi động Summary Engine & Drive auto-sync...');
-  if (process.env.ENABLE_SUMMARY !== 'false') {
-    startSummaryEngine(api);
-  } else {
-    log.info('Summary Engine tắt (ENABLE_SUMMARY=false)');
-  }
-  startAutoSync().catch(err => log.warn('Auto-sync lỗi', err.message));
 
   if (process.env.ENABLE_DEAL_ANALYSIS === 'true') {
     startDealAnalyzer();
