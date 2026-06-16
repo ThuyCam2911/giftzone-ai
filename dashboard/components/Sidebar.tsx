@@ -3,10 +3,10 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 
 const nav = [
-  { href: '/overview',       label: 'Tổng quan' },
-  { href: '/logs',           label: 'AI Logs' },
-  { href: '/knowledge-base', label: 'Knowledge Base' },
-  { href: '/settings',       label: 'Cài đặt' },
+  { href: '/overview',       label: 'Tổng quan',      icon: '📊' },
+  { href: '/logs',           label: 'AI Logs',         icon: '💬' },
+  { href: '/knowledge-base', label: 'Knowledge Base',  icon: '📚' },
+  { href: '/settings',       label: 'Cài đặt',         icon: '⚙️' },
 ];
 
 export default function Sidebar() {
@@ -19,32 +19,67 @@ export default function Sidebar() {
   }
 
   return (
-    <aside className="w-52 shrink-0 bg-white border-r border-gray-200 flex flex-col">
-      <div className="px-5 py-5 border-b border-gray-100">
-        <p className="font-bold text-gray-900 text-sm">GiftZone</p>
-        <p className="text-xs text-gray-400">AI Agent Dashboard</p>
+    <aside className="w-56 shrink-0 flex flex-col min-h-screen"
+      style={{ background: '#fff', borderRight: '1px solid #e5e7eb' }}>
+
+      {/* Logo area */}
+      <div className="px-5 py-6" style={{
+        background: 'linear-gradient(135deg, #02AD64 0%, #018a4e 100%)',
+      }}>
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-lg flex items-center justify-center text-lg"
+            style={{ background: 'rgba(255,255,255,0.2)' }}>
+            🎁
+          </div>
+          <div>
+            <p className="font-bold text-white text-sm leading-tight">GiftZone</p>
+            <p className="text-xs leading-tight" style={{ color: 'rgba(255,255,255,0.75)' }}>
+              AI Dashboard
+            </p>
+          </div>
+        </div>
       </div>
-      <nav className="flex-1 px-3 py-4 space-y-1">
-        {nav.map(item => (
-          <Link
-            key={item.href}
-            href={item.href}
-            className={`block px-3 py-2 rounded-lg text-sm transition-colors ${
-              pathname.startsWith(item.href)
-                ? 'bg-blue-50 text-blue-700 font-medium'
-                : 'text-gray-600 hover:bg-gray-100'
-            }`}
-          >
-            {item.label}
-          </Link>
-        ))}
+
+      {/* Nav */}
+      <nav className="flex-1 px-3 py-4 space-y-0.5">
+        {nav.map(item => {
+          const active = pathname.startsWith(item.href);
+          return (
+            <Link key={item.href} href={item.href}
+              className="nav-item flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium"
+              style={active ? {
+                background: '#e6f9f1',
+                color: '#018a4e',
+                borderLeft: '3px solid #02AD64',
+                paddingLeft: '9px',
+              } : {
+                color: '#6b7280',
+                borderLeft: '3px solid transparent',
+                paddingLeft: '9px',
+              }}
+            >
+              <span className="text-base">{item.icon}</span>
+              {item.label}
+            </Link>
+          );
+        })}
       </nav>
-      <div className="px-3 py-4 border-t border-gray-100">
-        <button
-          onClick={logout}
-          className="w-full text-left px-3 py-2 rounded-lg text-sm text-gray-500 hover:bg-gray-100"
+
+      {/* Footer */}
+      <div className="px-3 py-4" style={{ borderTop: '1px solid #f3f4f6' }}>
+        <button onClick={logout}
+          className="nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm"
+          style={{ color: '#9ca3af' }}
+          onMouseEnter={e => {
+            (e.currentTarget as HTMLElement).style.background = '#fef2f2';
+            (e.currentTarget as HTMLElement).style.color = '#ef4444';
+          }}
+          onMouseLeave={e => {
+            (e.currentTarget as HTMLElement).style.background = 'transparent';
+            (e.currentTarget as HTMLElement).style.color = '#9ca3af';
+          }}
         >
-          Đăng xuất
+          <span>🚪</span> Đăng xuất
         </button>
       </div>
     </aside>

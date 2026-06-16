@@ -108,85 +108,113 @@ export default async function OverviewPage() {
       <main className="flex-1 p-8 overflow-auto">
         <div className="max-w-5xl space-y-6">
           <div>
-            <h1 className="text-xl font-bold text-gray-900">Tổng quan</h1>
-            <p className="text-sm text-gray-500 mt-0.5">Agent: {data.agentName}</p>
+            <h1 className="text-2xl font-bold" style={{ color: '#111827' }}>Tổng quan</h1>
+            <p className="text-sm mt-0.5" style={{ color: '#9ca3af' }}>Agent: <span style={{ color: '#02AD64', fontWeight: 600 }}>{data.agentName}</span></p>
           </div>
 
           <SessionAlert status={data.sessionStatus} />
 
           {/* KPI cards */}
           <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-            <StatsCard label="Groups hoạt động hôm nay" value={data.totalGroupsToday} />
-            <StatsCard label="Tin nhắn hôm nay" value={data.messagesToday} />
+            <StatsCard label="Groups hoạt động hôm nay" value={data.totalGroupsToday} icon="👥" accent="green" />
+            <StatsCard label="Tin nhắn hôm nay" value={data.messagesToday} icon="💬" accent="blue" />
             <StatsCard
               label="Câu hỏi AI hôm nay"
               value={data.aiQueriesToday}
               sub={data.avgLatencyMs ? `Avg ${(data.avgLatencyMs / 1000).toFixed(1)}s` : undefined}
+              icon="🤖" accent="orange"
             />
             <StatsCard
               label="Chunks đã index"
               value={data.docChunks}
               sub={data.lastIndexedAt ? `Cập nhật: ${formatDate(data.lastIndexedAt)}` : undefined}
+              icon="📄" accent="purple"
             />
           </div>
 
           {/* Row 2: chart + health */}
           <div className="grid grid-cols-3 gap-4">
             {/* 7-day chart */}
-            <div className="col-span-2 bg-white border border-gray-200 rounded-xl p-5">
-              <p className="text-sm font-medium text-gray-700 mb-4">Hội thoại AI — 7 ngày qua</p>
+            <div className="col-span-2 bg-white rounded-2xl p-5"
+              style={{ boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
+              <p className="text-sm font-semibold mb-1" style={{ color: '#111827' }}>Hội thoại AI — 7 ngày qua</p>
+              <p className="text-xs mb-4" style={{ color: '#9ca3af' }}>Số câu hỏi được xử lý mỗi ngày</p>
               <div className="flex items-end gap-2 h-28">
-                {data.days7.map((d, i) => (
-                  <div key={i} className="flex-1 flex flex-col items-center gap-1">
-                    <span className="text-[10px] text-gray-400">{d.count || ''}</span>
-                    <div className="w-full flex items-end" style={{ height: 72 }}>
-                      <div
-                        className="w-full rounded-t bg-blue-400"
-                        style={{ height: `${d.count === 0 ? 2 : Math.max(8, (d.count / chartMax) * 72)}px` }}
-                      />
+                {data.days7.map((d, i) => {
+                  const isToday = i === 6;
+                  return (
+                    <div key={i} className="flex-1 flex flex-col items-center gap-1">
+                      <span className="text-[10px]" style={{ color: '#9ca3af' }}>{d.count || ''}</span>
+                      <div className="w-full flex items-end" style={{ height: 72 }}>
+                        <div
+                          className="w-full rounded-t transition-all duration-500"
+                          style={{
+                            height: `${d.count === 0 ? 2 : Math.max(8, (d.count / chartMax) * 72)}px`,
+                            background: isToday ? '#FF6900' : '#02AD64',
+                            opacity: d.count === 0 ? 0.2 : 1,
+                          }}
+                        />
+                      </div>
+                      <span className="text-[10px]" style={{ color: isToday ? '#FF6900' : '#9ca3af', fontWeight: isToday ? 600 : 400 }}>
+                        {d.label}
+                      </span>
                     </div>
-                    <span className="text-[10px] text-gray-400">{d.label}</span>
-                  </div>
-                ))}
+                  );
+                })}
+              </div>
+              <div className="flex gap-4 mt-3">
+                <div className="flex items-center gap-1.5">
+                  <div className="w-2.5 h-2.5 rounded-sm" style={{ background: '#02AD64' }} />
+                  <span className="text-[10px]" style={{ color: '#9ca3af' }}>Các ngày</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <div className="w-2.5 h-2.5 rounded-sm" style={{ background: '#FF6900' }} />
+                  <span className="text-[10px]" style={{ color: '#9ca3af' }}>Hôm nay</span>
+                </div>
               </div>
             </div>
 
             {/* Health */}
-            <div className="bg-white border border-gray-200 rounded-xl p-5">
-              <p className="text-sm font-medium text-gray-700 mb-4">Trạng thái hệ thống</p>
+            <div className="bg-white rounded-2xl p-5"
+              style={{ boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
+              <p className="text-sm font-semibold mb-4" style={{ color: '#111827' }}>Trạng thái hệ thống</p>
               <ul className="space-y-3">
-                <li className="flex justify-between items-center text-sm">
-                  <span className="text-gray-500">Zalo session</span>
-                  <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                <li className="flex justify-between items-center">
+                  <span className="text-xs" style={{ color: '#6b7280' }}>Zalo session</span>
+                  <span className="text-xs font-semibold px-2.5 py-1 rounded-full flex items-center gap-1" style={
                     data.sessionStatus === 'ok'
-                      ? 'bg-green-50 text-green-700'
+                      ? { background: '#e6f9f1', color: '#018a4e' }
                       : data.sessionStatus === 'warning'
-                      ? 'bg-yellow-50 text-yellow-700'
+                      ? { background: '#fffbeb', color: '#92400e' }
                       : data.sessionStatus === 'expired'
-                      ? 'bg-red-50 text-red-600'
-                      : 'bg-gray-100 text-gray-500'
-                  }`}>
-                    {data.sessionStatus === 'ok' ? '● Online'
-                      : data.sessionStatus === 'warning' ? '● Warning'
-                      : data.sessionStatus === 'expired' ? '● Expired'
-                      : '○ Unknown'}
+                      ? { background: '#fef2f2', color: '#991b1b' }
+                      : { background: '#f3f4f6', color: '#6b7280' }
+                  }>
+                    <span className={data.sessionStatus === 'ok' ? 'pulse-green' : ''}>●</span>
+                    {data.sessionStatus === 'ok' ? 'Online'
+                      : data.sessionStatus === 'warning' ? 'Warning'
+                      : data.sessionStatus === 'expired' ? 'Expired'
+                      : 'Unknown'}
                   </span>
                 </li>
-                <li className="flex justify-between items-center text-sm">
-                  <span className="text-gray-500">Last seen</span>
-                  <span className="text-xs text-gray-600">{timeAgo(data.sessionLastSeen)}</span>
+                <li className="flex justify-between items-center">
+                  <span className="text-xs" style={{ color: '#6b7280' }}>Last seen</span>
+                  <span className="text-xs font-medium" style={{ color: '#374151' }}>{timeAgo(data.sessionLastSeen)}</span>
                 </li>
-                <li className="flex justify-between items-center text-sm">
-                  <span className="text-gray-500">Database</span>
-                  <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-green-50 text-green-700">● Supabase OK</span>
+                <li className="flex justify-between items-center">
+                  <span className="text-xs" style={{ color: '#6b7280' }}>Database</span>
+                  <span className="text-xs font-semibold px-2.5 py-1 rounded-full flex items-center gap-1"
+                    style={{ background: '#e6f9f1', color: '#018a4e' }}>
+                    <span className="pulse-green">●</span> Supabase OK
+                  </span>
                 </li>
-                <li className="flex justify-between items-center text-sm">
-                  <span className="text-gray-500">Chunks</span>
-                  <span className="text-xs text-gray-600">{data.docChunks} chunks</span>
+                <li className="flex justify-between items-center">
+                  <span className="text-xs" style={{ color: '#6b7280' }}>Tài liệu index</span>
+                  <span className="text-xs font-medium" style={{ color: '#374151' }}>{data.docChunks} chunks</span>
                 </li>
-                <li className="flex justify-between items-center text-sm">
-                  <span className="text-gray-500">Index gần nhất</span>
-                  <span className="text-xs text-gray-600">{timeAgo(data.lastIndexedAt)}</span>
+                <li className="flex justify-between items-center">
+                  <span className="text-xs" style={{ color: '#6b7280' }}>Index gần nhất</span>
+                  <span className="text-xs font-medium" style={{ color: '#374151' }}>{timeAgo(data.lastIndexedAt)}</span>
                 </li>
               </ul>
             </div>
@@ -195,10 +223,12 @@ export default async function OverviewPage() {
           {/* Row 3: top questions + recent */}
           <div className="grid grid-cols-2 gap-4">
             {/* Top questions */}
-            <div className="bg-white border border-gray-200 rounded-xl p-5">
-              <p className="text-sm font-medium text-gray-700 mb-4">Top câu hỏi hay gặp</p>
+            <div className="bg-white rounded-2xl p-5"
+              style={{ boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
+              <p className="text-sm font-semibold mb-1" style={{ color: '#111827' }}>Top câu hỏi hay gặp</p>
+              <p className="text-xs mb-4" style={{ color: '#9ca3af' }}>Dựa trên lịch sử AI Logs</p>
               {data.topQuestions.length === 0
-                ? <p className="text-xs text-gray-400">Chưa có dữ liệu.</p>
+                ? <p className="text-xs" style={{ color: '#9ca3af' }}>Chưa có dữ liệu.</p>
                 : (
                   <ul className="space-y-3">
                     {data.topQuestions.map((q, i) => {
@@ -206,11 +236,13 @@ export default async function OverviewPage() {
                       return (
                         <li key={i} className="space-y-1">
                           <div className="flex justify-between gap-2">
-                            <p className="text-xs text-gray-700 flex-1 leading-snug">{q.question}</p>
-                            <span className="text-xs font-medium text-blue-600 shrink-0">{q.count}</span>
+                            <p className="text-xs flex-1 leading-snug" style={{ color: '#374151' }}>{q.question}</p>
+                            <span className="text-xs font-bold shrink-0 px-2 py-0.5 rounded-full"
+                              style={{ background: '#fff3eb', color: '#FF6900' }}>{q.count}</span>
                           </div>
-                          <div className="h-1 bg-gray-100 rounded-full">
-                            <div className="h-full bg-blue-400 rounded-full" style={{ width: `${(Number(q.count) / max) * 100}%` }} />
+                          <div className="h-1.5 rounded-full" style={{ background: '#f3f4f6' }}>
+                            <div className="h-full rounded-full transition-all duration-700"
+                              style={{ width: `${(Number(q.count) / max) * 100}%`, background: '#02AD64' }} />
                           </div>
                         </li>
                       );
@@ -220,19 +252,26 @@ export default async function OverviewPage() {
             </div>
 
             {/* Recent queries */}
-            <div className="bg-white border border-gray-200 rounded-xl p-5">
-              <p className="text-sm font-medium text-gray-700 mb-4">Câu hỏi gần nhất</p>
+            <div className="bg-white rounded-2xl p-5"
+              style={{ boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
+              <p className="text-sm font-semibold mb-1" style={{ color: '#111827' }}>Câu hỏi gần nhất</p>
+              <p className="text-xs mb-4" style={{ color: '#9ca3af' }}>5 câu hỏi mới nhất từ Sales</p>
               {data.recentQueries.length === 0
-                ? <p className="text-xs text-gray-400">Chưa có dữ liệu.</p>
+                ? <p className="text-xs" style={{ color: '#9ca3af' }}>Chưa có dữ liệu.</p>
                 : (
-                  <ul className="divide-y divide-gray-100">
+                  <ul className="space-y-0">
                     {data.recentQueries.map((r, i) => (
-                      <li key={i} className="py-2 flex gap-3 items-start">
-                        <span className="text-[10px] text-gray-400 shrink-0 mt-0.5">
+                      <li key={i} className="py-2.5 flex gap-3 items-start"
+                        style={{ borderBottom: i < data.recentQueries.length - 1 ? '1px solid #f3f4f6' : 'none' }}>
+                        <span className="text-[10px] shrink-0 mt-0.5 font-medium"
+                          style={{ color: '#02AD64' }}>
                           {new Date(r.created_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
                         </span>
-                        <p className="text-xs text-gray-700 flex-1 leading-snug">{r.query}</p>
-                        <span className="text-[10px] text-gray-400 shrink-0">{(r.latency_ms / 1000).toFixed(1)}s</span>
+                        <p className="text-xs flex-1 leading-snug" style={{ color: '#374151' }}>{r.query}</p>
+                        <span className="text-[10px] shrink-0 px-1.5 py-0.5 rounded font-medium"
+                          style={{ background: '#f3f4f6', color: '#6b7280' }}>
+                          {(r.latency_ms / 1000).toFixed(1)}s
+                        </span>
                       </li>
                     ))}
                   </ul>
