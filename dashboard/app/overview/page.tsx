@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import Sidebar from '@/components/Sidebar';
 import StatsCard from '@/components/StatsCard';
 import SessionAlert from '@/components/SessionAlert';
