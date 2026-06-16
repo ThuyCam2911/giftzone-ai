@@ -45,21 +45,41 @@ export class GroupListener {
   }
 
   async _handleMessage(message) {
-    // Chỉ xử lý Group messages
-    if (message.type !== MessageType.GroupMessage) return;
-
     const data      = message.data ?? {};
-    const groupId   = data.idTo ?? message.threadId;
     const senderUid = data.uidFrom ?? '';
     const senderName = data.dName ?? '';
     const content   = typeof data.content === 'string'
       ? data.content
       : JSON.stringify(data.content ?? '');
-    const mentions  = data.mentions ?? [];
     const ts        = data.ts ? new Date(Number(data.ts)) : new Date();
 
-    // Bỏ qua tin của chính Agent (selfListen=false nhưng phòng hờ)
+    // Bỏ qua tin của chính Agent
     if (senderUid === this.ownId) return;
+
+    // --- Chat 1:1 (UserMessage) ---
+    if (message.type === MessageType.UserMessage) {
+      const userId = senderUid;
+      log.info(`[1:1] ${senderName} (${userId}): "${content.slice(0, 80)}"`);
+
+      if (typeof this.onMention === 'function' && content.trim().length >= 2) {
+        await this.onMention({
+          groupId:   userId,   // dùng userId làm "thread id" để log
+          senderUid,
+          senderName,
+          rawContent: content,
+          query:     content.trim(),
+          ts,
+          isDirect:  true,     // flag để responder dùng UserMessage khi reply
+        });
+      }
+      return;
+    }
+
+    // --- Group message ---
+    if (message.type !== MessageType.GroupMessage) return;
+
+    const groupId  = data.idTo ?? message.threadId;
+    const mentions = data.mentions ?? [];
 
     log.debug(`[${groupId}] ${senderName}: ${content.slice(0, 60)}`);
 
@@ -72,7 +92,6 @@ export class GroupListener {
     );
 
     if (isMentioned && typeof this.onMention === 'function') {
-      // Tách query: bỏ "@Tên" (pos=0, len=N) khỏi content
       const userQuery = this._extractQuery(content, mentions);
       log.info(`@mention từ ${senderName} (${senderUid}): "${userQuery}"`);
 
@@ -81,8 +100,9 @@ export class GroupListener {
         senderUid,
         senderName,
         rawContent: content,
-        query: userQuery,
+        query:     userQuery,
         ts,
+        isDirect:  false,
       });
     }
   }

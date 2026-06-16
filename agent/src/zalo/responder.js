@@ -14,11 +14,11 @@ export class MentionResponder {
   }
 
   async handle(ctx) {
-    const { groupId, senderUid, senderName, query: userQuery, ts } = ctx;
+    const { groupId, senderUid, senderName, query: userQuery, ts, isDirect } = ctx;
 
     // Bỏ qua query rỗng
     if (!userQuery || userQuery.trim().length < 2) {
-      await this._send(groupId, `@${senderName} Bạn cần hỏi gì không? 😊`);
+      await this._send(groupId, `Bạn cần hỏi gì không? 😊`, isDirect);
       return;
     }
 
@@ -26,7 +26,7 @@ export class MentionResponder {
       const result = await answer(userQuery);
 
       const reply = result.answer;
-      await this._send(groupId, reply);
+      await this._send(groupId, reply, isDirect);
 
       // Log vào DB
       await this._logInteraction({
@@ -44,9 +44,10 @@ export class MentionResponder {
     }
   }
 
-  async _send(groupId, text) {
+  async _send(threadId, text, isDirect = false) {
     try {
-      await this.api.sendMessage({ msg: text }, groupId, MessageType.GroupMessage);
+      const type = isDirect ? MessageType.UserMessage : MessageType.GroupMessage;
+      await this.api.sendMessage({ msg: text }, threadId, type);
     } catch (err) {
       log.error('Gửi tin thất bại', err.message);
     }
