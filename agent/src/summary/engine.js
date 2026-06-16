@@ -17,19 +17,18 @@ const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
 
 // ─── Lấy tin nhắn trong khoảng thời gian ─────────────────────────────────────
 async function fetchMessages(groupId, since) {
-  const { rows } = await query(
+  return query(
     `SELECT sender_name, content, msg_ts
      FROM messages
      WHERE group_id = $1 AND msg_ts >= $2
      ORDER BY msg_ts ASC`,
     [groupId, since]
   );
-  return rows;
 }
 
 // ─── Lấy tất cả group IDs đang active ────────────────────────────────────────
 async function getActiveGroups(since) {
-  const { rows } = await query(
+  const rows = await query(
     `SELECT DISTINCT group_id FROM messages WHERE msg_ts >= $1`,
     [since]
   );
