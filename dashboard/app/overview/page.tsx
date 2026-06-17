@@ -114,19 +114,19 @@ export default async function OverviewPage() {
   }
 
   return (
-    <div className="flex min-h-screen">
+    <div className="flex min-h-screen bg-gray-50">
       <Sidebar />
-      <main className="flex-1 p-4 pt-18 md:pt-8 md:p-8 overflow-auto">
-        <div className="max-w-5xl space-y-6">
+      <main className="flex-1 p-4 pt-18 md:pt-8 md:p-8 overflow-auto min-w-0">
+        <div className="max-w-5xl mx-auto space-y-6">
           <div>
-            <h1 className="text-2xl font-bold" style={{ color: '#111827' }}>Hoạt động hôm nay</h1>
+            <h1 className="text-xl md:text-2xl font-bold" style={{ color: '#111827' }}>Hoạt động hôm nay</h1>
             <p className="text-sm mt-0.5" style={{ color: '#9ca3af' }}>● <span style={{ color: '#02AD64', fontWeight: 600 }}>{data.agentName}</span> đang hoạt động</p>
           </div>
 
           <SessionAlert status={data.sessionStatus} />
 
           {/* KPI cards */}
-          <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             <StatsCard label="Nhóm có hội thoại" value={data.totalGroupsToday} icon="👥" accent="green" />
             <StatsCard label="Tin nhắn ghi nhận" value={data.messagesToday} icon="💬" accent="blue" />
             <StatsCard
@@ -145,26 +145,19 @@ export default async function OverviewPage() {
 
           {/* Row 2: chart + health */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            {/* 7-day chart */}
-            <div className="lg:col-span-2">
+            <div className="lg:col-span-2 min-w-0">
               <WeekChart days={data.days7} />
             </div>
-
-            {/* Health */}
-            <div className="bg-white rounded-2xl p-5"
-              style={{ boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
+            <div className="bg-white rounded-2xl p-5" style={{ boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
               <p className="text-sm font-semibold mb-4" style={{ color: '#111827' }}>Tình trạng agent</p>
               <ul className="space-y-3">
-                <li className="flex justify-between items-center">
-                  <span className="text-xs" style={{ color: '#6b7280' }}>Kết nối Zalo</span>
-                  <span className="text-xs font-semibold px-2.5 py-1 rounded-full flex items-center gap-1" style={
-                    data.sessionStatus === 'ok'
-                      ? { background: '#e6f9f1', color: '#018a4e' }
-                      : data.sessionStatus === 'warning'
-                      ? { background: '#fffbeb', color: '#92400e' }
-                      : data.sessionStatus === 'expired'
-                      ? { background: '#fef2f2', color: '#991b1b' }
-                      : { background: '#f3f4f6', color: '#6b7280' }
+                <li className="flex justify-between items-center gap-2">
+                  <span className="text-xs shrink-0" style={{ color: '#6b7280' }}>Kết nối Zalo</span>
+                  <span className="text-xs font-semibold px-2.5 py-1 rounded-full flex items-center gap-1 shrink-0" style={
+                    data.sessionStatus === 'ok'      ? { background: '#e6f9f1', color: '#018a4e' }
+                    : data.sessionStatus === 'warning' ? { background: '#fffbeb', color: '#92400e' }
+                    : data.sessionStatus === 'expired' ? { background: '#fef2f2', color: '#991b1b' }
+                    : { background: '#f3f4f6', color: '#6b7280' }
                   }>
                     <span className={data.sessionStatus === 'ok' ? 'pulse-green' : ''}>●</span>
                     {data.sessionStatus === 'ok' ? 'Đang kết nối'
@@ -173,23 +166,23 @@ export default async function OverviewPage() {
                       : 'Chưa xác định'}
                   </span>
                 </li>
-                <li className="flex justify-between items-center">
-                  <span className="text-xs" style={{ color: '#6b7280' }}>Hoạt động lần cuối</span>
-                  <span className="text-xs font-medium" style={{ color: '#374151' }}>{timeAgo(data.sessionLastSeen)}</span>
+                <li className="flex justify-between items-center gap-2">
+                  <span className="text-xs shrink-0" style={{ color: '#6b7280' }}>Hoạt động lần cuối</span>
+                  <span className="text-xs font-medium text-right" style={{ color: '#374151' }}>{timeAgo(data.sessionLastSeen)}</span>
                 </li>
-                <li className="flex justify-between items-center">
-                  <span className="text-xs" style={{ color: '#6b7280' }}>Cơ sở dữ liệu</span>
-                  <span className="text-xs font-semibold px-2.5 py-1 rounded-full flex items-center gap-1"
+                <li className="flex justify-between items-center gap-2">
+                  <span className="text-xs shrink-0" style={{ color: '#6b7280' }}>Cơ sở dữ liệu</span>
+                  <span className="text-xs font-semibold px-2.5 py-1 rounded-full flex items-center gap-1 shrink-0"
                     style={{ background: '#e6f9f1', color: '#018a4e' }}>
                     <span className="pulse-green">●</span> Đang kết nối
                   </span>
                 </li>
-                <li className="flex justify-between items-center">
-                  <span className="text-xs" style={{ color: '#6b7280' }}>Tài liệu đã học</span>
+                <li className="flex justify-between items-center gap-2">
+                  <span className="text-xs shrink-0" style={{ color: '#6b7280' }}>Tài liệu đã học</span>
                   <span className="text-xs font-medium" style={{ color: '#374151' }}>{data.docChunks} đoạn</span>
                 </li>
-                <li className="flex justify-between items-center">
-                  <span className="text-xs" style={{ color: '#6b7280' }}>Lần học gần nhất</span>
+                <li className="flex justify-between items-center gap-2">
+                  <span className="text-xs shrink-0" style={{ color: '#6b7280' }}>Lần học gần nhất</span>
                   <span className="text-xs font-medium" style={{ color: '#374151' }}>{timeAgo(data.lastIndexedAt)}</span>
                 </li>
               </ul>
@@ -199,8 +192,7 @@ export default async function OverviewPage() {
           {/* Row 3: top questions + recent */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Top questions */}
-            <div className="bg-white rounded-2xl p-5"
-              style={{ boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
+            <div className="bg-white rounded-2xl p-5 min-w-0" style={{ boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
               <p className="text-sm font-semibold mb-1" style={{ color: '#111827' }}>Sales hay hỏi gì?</p>
               <p className="text-xs mb-4" style={{ color: '#9ca3af' }}>Tổng hợp từ lịch sử hội thoại</p>
               {data.topQuestions.length === 0
@@ -209,10 +201,12 @@ export default async function OverviewPage() {
                   <ul className="space-y-3">
                     {data.topQuestions.map((q, i) => {
                       const max = Number(data.topQuestions[0]?.count ?? 1);
+                      const displayQ = q.question.startsWith('{') || q.question.startsWith('[')
+                        ? '[Sticker / file đính kèm]' : q.question.slice(0, 80);
                       return (
                         <li key={i} className="space-y-1">
                           <div className="flex justify-between gap-2">
-                            <p className="text-xs flex-1 leading-snug" style={{ color: '#374151' }}>{q.question}</p>
+                            <p className="text-xs flex-1 leading-snug break-words" style={{ color: '#374151' }}>{displayQ}</p>
                             <span className="text-xs font-bold shrink-0 px-2 py-0.5 rounded-full"
                               style={{ background: '#fff3eb', color: '#FF6900' }}>{q.count}</span>
                           </div>
@@ -228,8 +222,7 @@ export default async function OverviewPage() {
             </div>
 
             {/* Recent queries */}
-            <div className="bg-white rounded-2xl p-5"
-              style={{ boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
+            <div className="bg-white rounded-2xl p-5 min-w-0" style={{ boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
               <p className="text-sm font-semibold mb-1" style={{ color: '#111827' }}>Vừa được hỏi</p>
               <p className="text-xs mb-4" style={{ color: '#9ca3af' }}>5 câu gần nhất trong ngày</p>
               {data.recentQueries.length === 0
@@ -239,11 +232,10 @@ export default async function OverviewPage() {
                     {data.recentQueries.map((r, i) => (
                       <li key={i} className="py-2.5 flex gap-3 items-start"
                         style={{ borderBottom: i < data.recentQueries.length - 1 ? '1px solid #f3f4f6' : 'none' }}>
-                        <span className="text-[10px] shrink-0 mt-0.5 font-medium"
-                          style={{ color: '#02AD64' }}>
+                        <span className="text-[10px] shrink-0 mt-0.5 font-medium" style={{ color: '#02AD64' }}>
                           {new Date(r.created_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Ho_Chi_Minh' })}
                         </span>
-                        <p className="text-xs flex-1 leading-snug overflow-hidden" style={{ color: '#374151', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
+                        <p className="text-xs flex-1 leading-snug min-w-0 break-words line-clamp-2" style={{ color: '#374151' }}>
                           {r.query.startsWith('{') || r.query.startsWith('[') ? '[Sticker / file đính kèm]' : r.query.slice(0, 120)}
                         </p>
                         <span className="text-[10px] shrink-0 px-1.5 py-0.5 rounded font-medium"
