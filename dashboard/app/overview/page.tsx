@@ -243,7 +243,9 @@ export default async function OverviewPage() {
                           style={{ color: '#02AD64' }}>
                           {new Date(r.created_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Ho_Chi_Minh' })}
                         </span>
-                        <p className="text-xs flex-1 leading-snug" style={{ color: '#374151' }}>{r.query}</p>
+                        <p className="text-xs flex-1 leading-snug overflow-hidden" style={{ color: '#374151', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
+                          {r.query.startsWith('{') || r.query.startsWith('[') ? '[Sticker / file đính kèm]' : r.query.slice(0, 120)}
+                        </p>
                         <span className="text-[10px] shrink-0 px-1.5 py-0.5 rounded font-medium"
                           style={{ background: '#f3f4f6', color: '#6b7280' }}>
                           {(r.latency_ms / 1000).toFixed(1)}s
