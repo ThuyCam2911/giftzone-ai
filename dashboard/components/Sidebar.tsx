@@ -6,6 +6,7 @@ import { usePathname, useRouter } from 'next/navigation';
 const nav = [
   { href: '/overview',       label: 'Tổng quan',      icon: '📊' },
   { href: '/deals',          label: 'Giám sát',        icon: '📋' },
+  { href: '/analytics',      label: 'Analytics',       icon: '📈' },
   { href: '/logs',           label: 'AI Logs',         icon: '💬' },
   { href: '/knowledge-base', label: 'Knowledge Base',  icon: '📚' },
   { href: '/settings',       label: 'Cài đặt',         icon: '⚙️' },
