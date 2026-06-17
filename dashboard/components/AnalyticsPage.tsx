@@ -25,12 +25,6 @@ export default function AnalyticsPage({ topQuestions, groupUsage, docUsage, late
 
   return (
     <>
-      {/* ── Header ── */}
-      <div className="mb-6">
-        <h1 className="text-lg font-bold text-gray-900">Analytics</h1>
-        <p className="text-sm text-gray-500 mt-0.5">Thống kê hiệu suất AI · 7 ngày gần nhất</p>
-      </div>
-
       {/* ── KPI cards ── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         {[

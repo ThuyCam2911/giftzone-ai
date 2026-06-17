@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
-import { Geist } from "next/font/google";
+import { Manrope } from "next/font/google";
 import "./globals.css";
 
-const geist = Geist({ subsets: ["latin"] });
+const manrope = Manrope({ subsets: ["latin"], variable: "--font-manrope" });
 
 export const metadata: Metadata = {
   title: "GiftZone Dashboard",
@@ -12,7 +12,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="vi" className="h-full">
-      <body className={`${geist.className} bg-gray-50 text-gray-900 min-h-full`}>
+      <body className={`${manrope.variable} font-manrope bg-gray-50 text-gray-900 min-h-full`}>
         {children}
       </body>
     </html>

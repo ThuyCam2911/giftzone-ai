@@ -1,11 +1,12 @@
 'use client';
 import { useState } from 'react';
+import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 
 const nav = [
   { href: '/overview',       label: 'Tổng quan',      icon: '📊' },
-  { href: '/deals',          label: 'Giám sát',        icon: '📋' },
+  { href: '/deals',          label: 'Chất lượng',      icon: '⭐' },
   { href: '/analytics',      label: 'Analytics',       icon: '📈' },
   { href: '/logs',           label: 'AI Logs',         icon: '💬' },
   { href: '/knowledge-base', label: 'Knowledge Base',  icon: '📚' },
@@ -28,12 +29,27 @@ export default function Sidebar() {
   };
   const inactiveStyle = { color: '#6b7280', borderLeft: '3px solid transparent', paddingLeft: '9px' };
 
+  const Logo = () => (
+    <div className="flex items-center gap-2.5">
+      <div className="w-8 h-8 rounded-lg overflow-hidden flex items-center justify-center shrink-0"
+        style={{ background: 'rgba(255,255,255,0.95)' }}>
+        <Image src="/logo.png" alt="GiftZone" width={28} height={28} className="object-contain" />
+      </div>
+      <div>
+        <p className="font-bold text-white text-sm leading-tight">GiftZone</p>
+        <p className="text-xs leading-tight" style={{ color: 'rgba(255,255,255,0.75)' }}>AI Dashboard</p>
+      </div>
+    </div>
+  );
+
   return (
     <>
       {/* ── Mobile top bar ── */}
       <header className="md:hidden fixed top-0 left-0 right-0 z-30 flex items-center justify-between px-4 h-14 bg-white border-b border-gray-200">
         <div className="flex items-center gap-2">
-          <span className="text-xl">🎁</span>
+          <div className="w-7 h-7 rounded overflow-hidden">
+            <Image src="/logo.png" alt="GiftZone" width={28} height={28} className="object-contain" />
+          </div>
           <span className="font-bold text-sm text-gray-800">GiftZone</span>
         </div>
         <button
@@ -78,25 +94,16 @@ export default function Sidebar() {
         </div>
       </div>
 
-      {/* ── Desktop sidebar ── */}
-      <aside className="hidden md:flex w-56 shrink-0 flex-col min-h-screen"
+      {/* ── Desktop sidebar — sticky full height ── */}
+      <aside className="hidden md:flex w-56 shrink-0 flex-col sticky top-0 h-screen"
         style={{ background: '#fff', borderRight: '1px solid #e5e7eb' }}>
 
-        <div className="px-5 py-6"
+        <div className="px-5 py-6 shrink-0"
           style={{ background: 'linear-gradient(135deg, #02AD64 0%, #018a4e 100%)' }}>
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg flex items-center justify-center text-lg"
-              style={{ background: 'rgba(255,255,255,0.2)' }}>
-              🎁
-            </div>
-            <div>
-              <p className="font-bold text-white text-sm leading-tight">GiftZone</p>
-              <p className="text-xs leading-tight" style={{ color: 'rgba(255,255,255,0.75)' }}>AI Dashboard</p>
-            </div>
-          </div>
+          <Logo />
         </div>
 
-        <nav className="flex-1 px-3 py-4 space-y-0.5">
+        <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
           {nav.map(item => {
             const active = pathname.startsWith(item.href);
             return (
@@ -111,7 +118,7 @@ export default function Sidebar() {
           })}
         </nav>
 
-        <div className="px-3 py-4" style={{ borderTop: '1px solid #f3f4f6' }}>
+        <div className="px-3 py-4 shrink-0" style={{ borderTop: '1px solid #f3f4f6' }}>
           <button onClick={logout}
             className="nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm"
             style={{ color: '#9ca3af' }}

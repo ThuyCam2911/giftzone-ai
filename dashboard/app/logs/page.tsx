@@ -45,14 +45,15 @@ export default async function LogsPage({
   const { rows, total, totalPages } = await getLogs(page);
 
   return (
-    <div className="flex min-h-screen">
+    <div className="flex min-h-screen bg-gray-50">
       <Sidebar />
-      <main className="flex-1 p-4 pt-18 md:pt-8 md:p-8">
+      <main className="flex-1 overflow-auto min-w-0">
+        <div className="sticky top-0 z-10 bg-gray-50/90 backdrop-blur border-b border-gray-200 px-4 pt-18 pb-3 md:pt-4 md:px-8 md:pb-4">
+          <h1 className="text-lg font-bold text-gray-900">AI Logs</h1>
+          <p className="text-xs text-gray-500 mt-0.5">{total} tổng số câu hỏi</p>
+        </div>
+        <div className="px-4 pb-8 md:px-8 pt-6">
         <div className="max-w-5xl">
-          <div className="mb-6">
-            <h1 className="text-xl font-bold text-gray-900">AI Logs</h1>
-            <p className="text-sm text-gray-500 mt-0.5">{total} tổng số câu hỏi</p>
-          </div>
 
           <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
             <table className="w-full text-sm">
@@ -103,6 +104,7 @@ export default async function LogsPage({
               ))}
             </div>
           )}
+        </div>
         </div>
       </main>
     </div>

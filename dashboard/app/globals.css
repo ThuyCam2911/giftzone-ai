@@ -8,13 +8,18 @@
   --brand-green-dark: #018a4e;
   --brand-orange: #FF6900;
   --brand-orange-light: #fff3eb;
+  --font-manrope: 'Manrope', sans-serif;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: "Inter", "Geist", Arial, sans-serif;
+  font-family: var(--font-manrope), "Inter", Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
+}
+
+.font-manrope {
+  font-family: var(--font-manrope), "Inter", Arial, sans-serif;
 }
 
 /* Scrollbar */
