@@ -135,5 +135,23 @@ export async function initSchema() {
     )
   `);
 
+  // Bảng issues chất lượng sales — phát hiện từ hội thoại Zalo
+  await query(`
+    CREATE TABLE IF NOT EXISTS sales_issues (
+      id           BIGSERIAL PRIMARY KEY,
+      group_id     TEXT NOT NULL,
+      issue_key    TEXT UNIQUE NOT NULL,
+      issue_type   TEXT NOT NULL,
+      severity     TEXT NOT NULL DEFAULT 'medium',
+      title        TEXT NOT NULL,
+      description  TEXT,
+      evidence     TEXT,
+      status       TEXT NOT NULL DEFAULT 'open',
+      detected_at  TIMESTAMPTZ DEFAULT NOW(),
+      resolved_at  TIMESTAMPTZ,
+      updated_at   TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+
   log.info('Schema sẵn sàng ✓');
 }
