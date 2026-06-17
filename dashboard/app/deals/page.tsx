@@ -73,6 +73,7 @@ async function getData(from: string, to: string) {
        FROM sales_issues s
        LEFT JOIN group_names gn ON gn.group_id = s.group_id
        WHERE s.detected_at >= $1 AND s.detected_at <= $2
+         AND COALESCE(gn.group_type, 'customer') != 'internal'
        ORDER BY
          CASE s.severity WHEN 'critical' THEN 1 WHEN 'high' THEN 2 WHEN 'medium' THEN 3 ELSE 4 END,
          s.detected_at DESC`,
@@ -114,6 +115,7 @@ async function getData(from: string, to: string) {
          FROM sales_issues WHERE detected_at >= $1 AND detected_at <= $2
          GROUP BY group_id
        ) si ON g.group_id = si.group_id
+       WHERE COALESCE(gn.group_type, 'customer') != 'internal'
        ORDER BY g.msg_count DESC`,
       [fromTs, toTs]
     ),

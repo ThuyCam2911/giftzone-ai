@@ -78,7 +78,10 @@ async function getGroupsWithNewMessages() {
        FROM sales_issues
        GROUP BY group_id
      ) s ON m.group_id = s.group_id
-     WHERE m.msg_ts > COALESCE(s.last_run, NOW() - INTERVAL '24 hours')`
+     WHERE m.msg_ts > COALESCE(s.last_run, NOW() - INTERVAL '24 hours')
+       AND m.group_id NOT IN (
+         SELECT group_id FROM group_names WHERE group_type = 'internal'
+       )`
   );
   return result.rows.map(r => r.group_id);
 }

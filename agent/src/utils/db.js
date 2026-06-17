@@ -158,8 +158,13 @@ export async function initSchema() {
     CREATE TABLE IF NOT EXISTS group_names (
       group_id   TEXT PRIMARY KEY,
       name       TEXT NOT NULL,
+      group_type TEXT NOT NULL DEFAULT 'customer',
       updated_at TIMESTAMPTZ DEFAULT NOW()
     )
+  `);
+  // Migration: thêm group_type nếu bảng đã tồn tại trước đó
+  await query(`
+    ALTER TABLE group_names ADD COLUMN IF NOT EXISTS group_type TEXT NOT NULL DEFAULT 'customer'
   `);
 
   log.info('Schema sẵn sàng ✓');
