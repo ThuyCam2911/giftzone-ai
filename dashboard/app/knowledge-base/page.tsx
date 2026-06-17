@@ -1,6 +1,7 @@
 'use client';
 import Sidebar from '@/components/Sidebar';
 import { useEffect, useState, useRef } from 'react';
+import { FileText, Paperclip } from 'lucide-react';
 
 interface FileRow { file_name: string; chunks: string; last_indexed: string }
 interface StatsData {
@@ -75,7 +76,7 @@ export default function KnowledgeBasePage() {
               <ul className="space-y-2">
                 {files.map(f => (
                   <li key={f.file_name} className="flex items-start gap-2">
-                    <span className="text-gray-400 mt-0.5 shrink-0">📄</span>
+                    <FileText size={14} className="text-gray-400 mt-0.5 shrink-0" strokeWidth={1.75} />
                     <div className="min-w-0">
                       <p className="text-xs text-gray-800 break-words" title={f.file_name}>{f.file_name}</p>
                       <p className="text-[10px] text-gray-400">{f.chunks} chunks</p>
@@ -101,7 +102,7 @@ export default function KnowledgeBasePage() {
                         <div className="mt-2 flex flex-wrap gap-1">
                           {m.sources.map(s => (
                             <span key={s} className="text-[10px] bg-white/20 rounded px-1.5 py-0.5 text-green-100">
-                              📎 {s}
+                              <Paperclip size={10} className="inline mr-0.5" />{s}
                             </span>
                           ))}
                         </div>

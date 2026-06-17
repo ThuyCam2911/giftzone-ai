@@ -7,6 +7,7 @@ import SessionAlert from '@/components/SessionAlert';
 import WeekChart from '@/components/WeekChart';
 import DateRangeFilter from '@/components/DateRangeFilter';
 import { query } from '@/lib/db';
+import { Users, MessageSquare, Bot, FileText } from 'lucide-react';
 
 function timeAgo(iso: string | null): string {
   if (!iso) return '—';
@@ -165,19 +166,19 @@ export default async function OverviewPage({
 
             {/* KPI cards */}
             <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-              <StatsCard label="Nhóm có hội thoại" value={data.totalGroups}  icon="👥" accent="green" />
-              <StatsCard label="Tin nhắn ghi nhận"  value={data.messages}    icon="💬" accent="blue" />
+              <StatsCard label="Nhóm có hội thoại" value={data.totalGroups}  icon={Users}        accent="green" />
+              <StatsCard label="Tin nhắn ghi nhận"  value={data.messages}    icon={MessageSquare} accent="blue" />
               <StatsCard
                 label="Câu hỏi AI xử lý"
                 value={data.aiQueries}
                 sub={data.avgLatencyMs ? `Avg ${(data.avgLatencyMs / 1000).toFixed(1)}s` : undefined}
-                icon="🤖" accent="orange"
+                icon={Bot} accent="orange"
               />
               <StatsCard
                 label="Tài liệu đã học"
                 value={data.docChunks}
                 sub={data.lastIndexedAt ? `Cập nhật ${timeAgo(data.lastIndexedAt)}` : undefined}
-                icon="📄" accent="purple"
+                icon={FileText} accent="purple"
               />
             </div>
 

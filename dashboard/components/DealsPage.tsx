@@ -2,6 +2,10 @@
 
 import React, { useState, useTransition } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import {
+  AlertTriangle, Siren, CheckCircle2, BarChart2, Star,
+  ChevronUp, ChevronDown, ChevronsUpDown, type LucideIcon,
+} from 'lucide-react';
 
 const SEVERITY_STYLE: Record<string, { bg: string; color: string; label: string }> = {
   critical: { bg: '#fef2f2', color: '#b91c1c', label: 'Khẩn cấp' },
@@ -112,14 +116,15 @@ export default function DealsPage({ stats, issues, groups, aiInsight, dateFrom, 
   const groupPages = Math.ceil(filteredGroups.length / GROUP_PAGE_SIZE);
   const pagedGroups = filteredGroups.slice((groupPage - 1) * GROUP_PAGE_SIZE, groupPage * GROUP_PAGE_SIZE);
 
-  const SortBtn = ({ k, label }: { k: SortKey; label: string }) => (
-    <button onClick={() => toggleSort(k)} className="flex items-center gap-1 group">
-      {label}
-      <span className="text-gray-300 group-hover:text-gray-500">
-        {sortKey === k ? (sortAsc ? '↑' : '↓') : '↕'}
-      </span>
-    </button>
-  );
+  const SortBtn = ({ k, label }: { k: SortKey; label: string }) => {
+    const SortIcon = sortKey === k ? (sortAsc ? ChevronUp : ChevronDown) : ChevronsUpDown;
+    return (
+      <button onClick={() => toggleSort(k)} className="flex items-center gap-1 group">
+        {label}
+        <SortIcon size={12} className="text-gray-300 group-hover:text-gray-500" />
+      </button>
+    );
+  };
 
   return (
     <>
@@ -148,16 +153,18 @@ export default function DealsPage({ stats, issues, groups, aiInsight, dateFrom, 
       <div className="px-4 pb-8 md:px-8 pt-6 space-y-6">
         {/* ── KPI cards ── */}
         <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-          {[
-            { label: 'Issues đang mở',     value: stats.openCount,     icon: '⚠️', color: '#FF6900' },
-            { label: 'Nghiêm trọng / Cao', value: stats.criticalCount, icon: '🚨', color: '#ef4444' },
-            { label: 'Giải quyết hôm nay', value: stats.resolvedToday, icon: '✅', color: '#02AD64' },
-            { label: 'Tổng phát hiện',     value: stats.totalAllTime,  icon: '📊', color: '#6366f1' },
-          ].map(card => (
+          {([
+            { label: 'Issues đang mở',     value: stats.openCount,     Icon: AlertTriangle,  color: '#FF6900', bg: '#fff3eb' },
+            { label: 'Nghiêm trọng / Cao', value: stats.criticalCount, Icon: Siren,          color: '#ef4444', bg: '#fef2f2' },
+            { label: 'Giải quyết hôm nay', value: stats.resolvedToday, Icon: CheckCircle2,   color: '#02AD64', bg: '#e6f9f1' },
+            { label: 'Tổng phát hiện',     value: stats.totalAllTime,  Icon: BarChart2,      color: '#6366f1', bg: '#eef2ff' },
+          ] as { label: string; value: number; Icon: LucideIcon; color: string; bg: string }[]).map(card => (
             <div key={card.label} className="bg-white rounded-xl border border-gray-200 p-4">
               <div className="flex items-center justify-between mb-3">
                 <span className="text-xs font-medium text-gray-500 uppercase tracking-wide leading-tight">{card.label}</span>
-                <span className="text-lg">{card.icon}</span>
+                <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: card.bg }}>
+                  <card.Icon size={16} style={{ color: card.color }} strokeWidth={1.75} />
+                </div>
               </div>
               <p className="text-2xl font-bold" style={{ color: card.color }}>{card.value}</p>
             </div>
@@ -167,7 +174,9 @@ export default function DealsPage({ stats, issues, groups, aiInsight, dateFrom, 
           <div className="bg-white rounded-xl border border-gray-200 p-4">
             <div className="flex items-center justify-between mb-3">
               <span className="text-xs font-medium text-gray-500 uppercase tracking-wide leading-tight">Điểm chất lượng</span>
-              <span className="text-lg">⭐</span>
+              <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: '#fffbeb' }}>
+                <Star size={16} style={{ color: '#f59e0b' }} strokeWidth={1.75} />
+              </div>
             </div>
             <p className="text-2xl font-bold" style={{ color: scoreColor(stats.avgScore).color }}>
               {stats.avgScore}/100
@@ -302,7 +311,9 @@ export default function DealsPage({ stats, issues, groups, aiInsight, dateFrom, 
           <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
             {issues.length === 0 ? (
               <div className="py-14 text-center px-4">
-                <div className="text-3xl mb-2">✅</div>
+                <div className="flex justify-center mb-2">
+                  <CheckCircle2 size={36} style={{ color: '#02AD64' }} strokeWidth={1.5} />
+                </div>
                 <p className="text-sm text-gray-500 font-medium">Không có issue nào trong kỳ này</p>
                 <p className="text-xs text-gray-400 mt-1 max-w-xs mx-auto">
                   Agent đang giám sát — issues sẽ xuất hiện khi phát hiện vấn đề trong hội thoại.

@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import WeekChart from './WeekChart';
+import { MessageSquare, Zap, TrendingUp, FileText, Flame, HelpCircle, type LucideIcon } from 'lucide-react';
 
 interface Props {
   topQuestions: { question: string; cnt: number }[];
@@ -27,16 +28,18 @@ export default function AnalyticsPage({ topQuestions, groupUsage, docUsage, late
     <>
       {/* ── KPI cards ── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        {[
-          { label: 'Câu hỏi / 7 ngày', value: totalWeek,         icon: '💬', color: '#02AD64' },
-          { label: 'Latency p50',       value: `${latency.p50}ms`, icon: '⚡', color: '#6366f1' },
-          { label: 'Latency p95',       value: `${latency.p95}ms`, icon: '📈', color: '#FF6900' },
-          { label: 'Tài liệu được dùng', value: uniqueDocs,       icon: '📄', color: '#0ea5e9' },
-        ].map(card => (
+        {([
+          { label: 'Câu hỏi / 7 ngày',  value: totalWeek,          Icon: MessageSquare, color: '#02AD64', bg: '#e6f9f1' },
+          { label: 'Latency p50',        value: `${latency.p50}ms`, Icon: Zap,           color: '#6366f1', bg: '#eef2ff' },
+          { label: 'Latency p95',        value: `${latency.p95}ms`, Icon: TrendingUp,    color: '#FF6900', bg: '#fff3eb' },
+          { label: 'Tài liệu được dùng', value: uniqueDocs,         Icon: FileText,      color: '#0ea5e9', bg: '#e0f2fe' },
+        ] as { label: string; value: string | number; Icon: LucideIcon; color: string; bg: string }[]).map(card => (
           <div key={card.label} className="bg-white rounded-xl border border-gray-200 p-4">
             <div className="flex items-center justify-between mb-3">
               <span className="text-xs font-medium text-gray-500 uppercase tracking-wide leading-tight">{card.label}</span>
-              <span className="text-lg">{card.icon}</span>
+              <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: card.bg }}>
+                <card.Icon size={16} style={{ color: card.color }} strokeWidth={1.75} />
+              </div>
             </div>
             <p className="text-2xl font-bold" style={{ color: card.color }}>{card.value}</p>
           </div>
@@ -60,7 +63,10 @@ export default function AnalyticsPage({ topQuestions, groupUsage, docUsage, late
                 ? { color: '#02AD64', borderBottom: '2px solid #02AD64', background: '#f9fafb' }
                 : { color: '#6b7280', borderBottom: '2px solid transparent' }}
             >
-              {t === 'top' ? '🔥 Hay hỏi nhất' : '❓ AI chưa biết'}
+              {t === 'top'
+                ? <span className="flex items-center gap-1.5"><Flame size={13} />Hay hỏi nhất</span>
+                : <span className="flex items-center gap-1.5"><HelpCircle size={13} />AI chưa biết</span>
+              }
             </button>
           ))}
           <span className="ml-auto mr-4 text-xs text-gray-400">
