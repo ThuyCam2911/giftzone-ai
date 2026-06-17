@@ -8,6 +8,7 @@ import { query } from '@/lib/db';
 interface SalesIssue {
   id: number;
   group_id: string;
+  group_name: string | null;
   issue_key: string;
   issue_type: string;
   severity: string;
@@ -21,6 +22,7 @@ interface SalesIssue {
 
 interface GroupRow {
   group_id: string;
+  group_name: string | null;
   msg_count: number;
   open_issues: number;
   critical: number;
@@ -66,12 +68,14 @@ async function getData(from: string, to: string) {
 
   const [issues, kpiResolvedToday, kpiTotal, groupStats, aiByGroup] = await Promise.all([
     query<SalesIssue>(
-      `SELECT id, group_id, issue_key, issue_type, severity, title, description, evidence, status, detected_at, resolved_at
-       FROM sales_issues
-       WHERE detected_at >= $1 AND detected_at <= $2
+      `SELECT s.id, s.group_id, gn.name AS group_name, s.issue_key, s.issue_type,
+              s.severity, s.title, s.description, s.evidence, s.status, s.detected_at, s.resolved_at
+       FROM sales_issues s
+       LEFT JOIN group_names gn ON gn.group_id = s.group_id
+       WHERE s.detected_at >= $1 AND s.detected_at <= $2
        ORDER BY
-         CASE severity WHEN 'critical' THEN 1 WHEN 'high' THEN 2 WHEN 'medium' THEN 3 ELSE 4 END,
-         detected_at DESC`,
+         CASE s.severity WHEN 'critical' THEN 1 WHEN 'high' THEN 2 WHEN 'medium' THEN 3 ELSE 4 END,
+         s.detected_at DESC`,
       [fromTs, toTs]
     ),
     query<{ count: string }>(
@@ -82,9 +86,10 @@ async function getData(from: string, to: string) {
       `SELECT COUNT(*) as count FROM sales_issues`
     ),
     // Group breakdown: msg count + open issues per group
-    query<{ group_id: string; msg_count: string; open_issues: string; critical: string; high: string; medium: string; low: string; resolved_issues: string }>(
+    query<{ group_id: string; group_name: string | null; msg_count: string; open_issues: string; critical: string; high: string; medium: string; low: string; resolved_issues: string }>(
       `SELECT
          g.group_id,
+         gn.name AS group_name,
          g.msg_count,
          COALESCE(si.open_issues, 0) AS open_issues,
          COALESCE(si.critical, 0)    AS critical,
@@ -97,6 +102,7 @@ async function getData(from: string, to: string) {
          FROM messages WHERE msg_ts >= $1 AND msg_ts <= $2
          GROUP BY group_id
        ) g
+       LEFT JOIN group_names gn ON gn.group_id = g.group_id
        LEFT JOIN (
          SELECT group_id,
            SUM(CASE WHEN status='open' THEN 1 ELSE 0 END) AS open_issues,
@@ -125,6 +131,7 @@ async function getData(from: string, to: string) {
     const c = Number(r.critical), h = Number(r.high), m = Number(r.medium), l = Number(r.low);
     return {
       group_id: r.group_id,
+      group_name: r.group_name ?? null,
       msg_count: Number(r.msg_count),
       open_issues: Number(r.open_issues),
       critical: c, high: h, medium: m, low: l,

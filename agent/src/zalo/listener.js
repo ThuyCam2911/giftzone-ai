@@ -15,6 +15,7 @@ export class GroupListener {
     this.api    = api;
     this.ownId  = ownId;
     this.onMention = null; // async (ctx) => void  — set từ ngoài
+    this._knownGroups = new Set(); // tránh gọi getGroupInfo lặp lại
   }
 
   start() {
@@ -89,6 +90,9 @@ export class GroupListener {
     // Lưu vào DB để summary
     await this._logMessage(groupId, senderUid, senderName, content, ts);
 
+    // Lazy-fetch tên nhóm nếu chưa biết
+    this._cacheGroupName(groupId);
+
     // Detect @mention Agent
     const isMentioned = mentions.some(
       (m) => String(m.uid ?? '') === String(this.ownId)
@@ -121,6 +125,25 @@ export class GroupListener {
       }
     }
     return q.trim();
+  }
+
+  // Fire-and-forget: gọi getGroupInfo 1 lần rồi cache vào DB
+  _cacheGroupName(groupId) {
+    if (this._knownGroups.has(groupId)) return;
+    this._knownGroups.add(groupId);
+    this.api.getGroupInfo(groupId)
+      .then(res => {
+        const info = res?.gridInfoMap?.[groupId];
+        const name = info?.name;
+        if (!name) return;
+        return query(
+          `INSERT INTO group_names (group_id, name, updated_at)
+           VALUES ($1, $2, NOW())
+           ON CONFLICT (group_id) DO UPDATE SET name = $2, updated_at = NOW()`,
+          [groupId, name]
+        );
+      })
+      .catch(err => log.warn(`Không lấy được tên nhóm ${groupId}:`, err.message));
   }
 
   async _logMessage(groupId, senderUid, senderName, content, ts) {

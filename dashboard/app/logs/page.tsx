@@ -1,12 +1,12 @@
 export const dynamic = 'force-dynamic';
 
-import { unstable_cache } from 'next/cache';
 import Sidebar from '@/components/Sidebar';
 import { query } from '@/lib/db';
 
 interface LogRow {
   id: number;
   group_id: string;
+  group_name: string | null;
   query: string;
   answer: string;
   sources: string[];
@@ -14,25 +14,27 @@ interface LogRow {
   created_at: string;
 }
 
-const getLogs = unstable_cache(
-  async (page: number) => _getLogs(page),
-  ['logs'],
-  { revalidate: 30, tags: ['logs'] }
-);
-
-async function _getLogs(page = 1) {
+async function getLogs(page = 1) {
   const limit = 20;
   const offset = (page - 1) * limit;
   const [rows, total] = await Promise.all([
     query<LogRow>(
-      `SELECT id, group_id, sender_uid, query, answer, sources, latency_ms, created_at
-       FROM ai_logs ORDER BY created_at DESC LIMIT $1 OFFSET $2`,
+      `SELECT l.id, l.group_id, gn.name AS group_name, l.query, l.answer,
+              l.sources, l.latency_ms, l.created_at
+       FROM ai_logs l
+       LEFT JOIN group_names gn ON gn.group_id = l.group_id
+       ORDER BY l.created_at DESC LIMIT $1 OFFSET $2`,
       [limit, offset]
     ),
     query<{ count: string }>(`SELECT COUNT(*) AS count FROM ai_logs`),
   ]);
   const totalCount = Number(total[0]?.count ?? 0);
   return { rows, total: totalCount, totalPages: Math.ceil(totalCount / limit) };
+}
+
+function groupLabel(groupId: string, groupName: string | null) {
+  if (groupName) return groupName;
+  return `···${groupId.slice(-8)}`;
 }
 
 export default async function LogsPage({
@@ -53,58 +55,61 @@ export default async function LogsPage({
           <p className="text-xs text-gray-500 mt-0.5">{total} tổng số câu hỏi</p>
         </div>
         <div className="px-4 pb-8 md:px-8 pt-6">
-        <div className="max-w-5xl">
-
-          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50 border-b border-gray-200">
-                <tr>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Thời gian</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Group</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Câu hỏi</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Nguồn</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Latency</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {rows.length === 0 && (
+          <div className="max-w-5xl">
+            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 border-b border-gray-200">
                   <tr>
-                    <td colSpan={5} className="text-center py-10 text-gray-400">Chưa có dữ liệu</td>
+                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Thời gian</th>
+                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Nhóm</th>
+                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Câu hỏi</th>
+                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Nguồn</th>
+                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Latency</th>
                   </tr>
-                )}
-                {rows.map(row => (
-                  <tr key={row.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 text-gray-500 whitespace-nowrap">
-                      {new Date(row.created_at).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })}
-                    </td>
-                    <td className="px-4 py-3 text-gray-600 font-mono text-xs">{row.group_id.slice(-6)}</td>
-                    <td className="px-4 py-3 text-gray-900 max-w-xs truncate">{row.query}</td>
-                    <td className="px-4 py-3 text-gray-500 text-xs">
-                      {Array.isArray(row.sources) ? row.sources.join(', ') : '—'}
-                    </td>
-                    <td className="px-4 py-3 text-gray-500 whitespace-nowrap">
-                      {row.latency_ms ? `${(row.latency_ms / 1000).toFixed(1)}s` : '—'}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          {totalPages > 1 && (
-            <div className="flex gap-2 mt-4 justify-end">
-              {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => (
-                <a
-                  key={p}
-                  href={`?page=${p}`}
-                  className={`px-3 py-1 rounded text-sm ${p === page ? 'bg-blue-600 text-white' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'}`}
-                >
-                  {p}
-                </a>
-              ))}
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {rows.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="text-center py-10 text-gray-400">Chưa có dữ liệu</td>
+                    </tr>
+                  )}
+                  {rows.map(row => (
+                    <tr key={row.id} className="hover:bg-gray-50">
+                      <td className="px-4 py-3 text-gray-500 whitespace-nowrap text-xs">
+                        {new Date(row.created_at).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })}
+                      </td>
+                      <td className="px-4 py-3 text-xs">
+                        {row.group_name
+                          ? <span className="text-gray-800 font-medium">{row.group_name}</span>
+                          : <span className="text-gray-400 font-mono">···{row.group_id.slice(-8)}</span>}
+                      </td>
+                      <td className="px-4 py-3 text-gray-900 max-w-xs truncate">{row.query}</td>
+                      <td className="px-4 py-3 text-gray-500 text-xs">
+                        {Array.isArray(row.sources) ? row.sources.join(', ') : '—'}
+                      </td>
+                      <td className="px-4 py-3 text-gray-500 whitespace-nowrap text-xs">
+                        {row.latency_ms ? `${(row.latency_ms / 1000).toFixed(1)}s` : '—'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
-          )}
-        </div>
+
+            {totalPages > 1 && (
+              <div className="flex gap-2 mt-4 justify-end flex-wrap">
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => (
+                  <a key={p} href={`?page=${p}`}
+                    className={`px-3 py-1 rounded text-sm ${p === page
+                      ? 'text-white'
+                      : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'}`}
+                    style={p === page ? { background: '#02AD64' } : {}}>
+                    {p}
+                  </a>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </main>
     </div>

@@ -10,9 +10,11 @@ async function getData() {
       `SELECT query AS question, COUNT(*) AS cnt
        FROM ai_logs GROUP BY query ORDER BY cnt DESC LIMIT 10`
     ),
-    query<{ group_id: string; cnt: string; avg_ms: string }>(
-      `SELECT group_id, COUNT(*) AS cnt, AVG(latency_ms)::int AS avg_ms
-       FROM ai_logs GROUP BY group_id ORDER BY cnt DESC LIMIT 10`
+    query<{ group_id: string; group_name: string | null; cnt: string; avg_ms: string }>(
+      `SELECT l.group_id, gn.name AS group_name, COUNT(*) AS cnt, AVG(l.latency_ms)::int AS avg_ms
+       FROM ai_logs l
+       LEFT JOIN group_names gn ON gn.group_id = l.group_id
+       GROUP BY l.group_id, gn.name ORDER BY cnt DESC LIMIT 10`
     ),
     query<{ src: string; cnt: string }>(
       `SELECT src, COUNT(*) AS cnt
@@ -59,7 +61,7 @@ async function getData() {
 
   return {
     topQuestions: topQuestions.map(r => ({ question: r.question, cnt: Number(r.cnt) })),
-    groupUsage: groupUsage.map(r => ({ group_id: r.group_id, cnt: Number(r.cnt), avg_ms: Number(r.avg_ms) })),
+    groupUsage: groupUsage.map(r => ({ group_id: r.group_id, group_name: r.group_name ?? null, cnt: Number(r.cnt), avg_ms: Number(r.avg_ms) })),
     docUsage: docUsage.map(r => ({ src: r.src, cnt: Number(r.cnt) })),
     latency: latency
       ? { p50: Number(latency.p50), p95: Number(latency.p95), maxMs: Number(latency.max_ms), total: Number(latency.total) }

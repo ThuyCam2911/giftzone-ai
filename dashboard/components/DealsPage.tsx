@@ -18,6 +18,7 @@ const STATUS_STYLE: Record<string, { bg: string; color: string; label: string }>
 interface SalesIssue {
   id: number;
   group_id: string;
+  group_name: string | null;
   issue_type: string;
   severity: string;
   title: string;
@@ -30,6 +31,7 @@ interface SalesIssue {
 
 interface GroupRow {
   group_id: string;
+  group_name: string | null;
   msg_count: number;
   open_issues: number;
   critical: number;
@@ -227,8 +229,10 @@ export default function DealsPage({ stats, issues, groups, aiInsight, dateFrom, 
                         const sc = scoreColor(g.quality_score);
                         return (
                           <tr key={g.group_id} className="hover:bg-gray-50">
-                            <td className="px-4 py-3 font-mono text-xs text-gray-500">
-                              ···{g.group_id.slice(-8)}
+                            <td className="px-4 py-3 text-xs">
+                              {g.group_name
+                                ? <span className="text-gray-800 font-medium">{g.group_name}</span>
+                                : <span className="font-mono text-gray-400">···{g.group_id.slice(-8)}</span>}
                             </td>
                             <td className="px-4 py-3 text-gray-700 font-medium">{g.msg_count.toLocaleString()}</td>
                             <td className="px-4 py-3">
@@ -326,9 +330,10 @@ export default function DealsPage({ stats, issues, groups, aiInsight, dateFrom, 
                         <React.Fragment key={issue.id}>
                           <tr className="hover:bg-gray-50 cursor-pointer"
                             onClick={() => setExpanded(isExpanded ? null : issue.id)}>
-                            <td className="px-4 py-3 text-gray-700">
-                              <span className="font-mono text-xs text-gray-400">···</span>
-                              {issue.group_id.slice(-8)}
+                            <td className="px-4 py-3 text-xs">
+                              {issue.group_name
+                                ? <span className="text-gray-800 font-medium">{issue.group_name}</span>
+                                : <span className="font-mono text-gray-400">···{issue.group_id.slice(-8)}</span>}
                             </td>
                             <td className="px-4 py-3 text-gray-700 whitespace-nowrap">
                               {issueLabels[issue.issue_type] ?? issue.issue_type}

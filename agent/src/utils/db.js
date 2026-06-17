@@ -153,5 +153,14 @@ export async function initSchema() {
     )
   `);
 
+  // Bảng tên nhóm Zalo — lazy-populated khi listener gặp group mới
+  await query(`
+    CREATE TABLE IF NOT EXISTS group_names (
+      group_id   TEXT PRIMARY KEY,
+      name       TEXT NOT NULL,
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+
   log.info('Schema sẵn sàng ✓');
 }

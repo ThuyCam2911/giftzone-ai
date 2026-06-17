@@ -5,7 +5,7 @@ import WeekChart from './WeekChart';
 
 interface Props {
   topQuestions: { question: string; cnt: number }[];
-  groupUsage: { group_id: string; cnt: number; avg_ms: number }[];
+  groupUsage: { group_id: string; group_name: string | null; cnt: number; avg_ms: number }[];
   docUsage: { src: string; cnt: number }[];
   latency: { p50: number; p95: number; maxMs: number; total: number };
   days7: { label: string; count: number }[];
@@ -89,7 +89,9 @@ export default function AnalyticsPage({ topQuestions, groupUsage, docUsage, late
             <ul className="divide-y divide-gray-50">
               {groupUsage.map(g => (
                 <li key={g.group_id} className="flex items-center gap-3 px-4 py-3">
-                  <span className="font-mono text-xs text-gray-400 shrink-0">···{g.group_id.slice(-8)}</span>
+                  {g.group_name
+                    ? <span className="text-xs font-medium text-gray-700 shrink-0 max-w-[120px] truncate">{g.group_name}</span>
+                    : <span className="font-mono text-xs text-gray-400 shrink-0">···{g.group_id.slice(-8)}</span>}
                   <div className="flex-1 min-w-0">
                     <div className="h-1.5 rounded-full bg-gray-100">
                       <div className="h-full rounded-full" style={{
