@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import React, { useState, useTransition } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 
 const SEVERITY_STYLE: Record<string, { bg: string; color: string; label: string }> = {
@@ -134,8 +134,8 @@ export default function DealsPage({ stats, issues, aiInsight, dateFrom, dateTo, 
                     const sts = STATUS_STYLE[issue.status] ?? STATUS_STYLE.open;
                     const isExpanded = expanded === issue.id;
                     return (
-                      <>
-                        <tr key={issue.id} className="hover:bg-gray-50 cursor-pointer"
+                      <React.Fragment key={issue.id}>
+                        <tr className="hover:bg-gray-50 cursor-pointer"
                           onClick={() => setExpanded(isExpanded ? null : issue.id)}>
                           <td className="px-4 py-3 text-gray-700">
                             <span className="font-mono text-xs text-gray-400">···</span>
@@ -179,7 +179,7 @@ export default function DealsPage({ stats, issues, aiInsight, dateFrom, dateTo, 
                             </td>
                           </tr>
                         )}
-                      </>
+                      </React.Fragment>
                     );
                   })}
                 </tbody>

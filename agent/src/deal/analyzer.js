@@ -54,7 +54,7 @@ async function callWithFallback(prompt) {
 // ─── Lấy messages mới kể từ lần analyze cuối của group ──────────────────────
 async function fetchNewMessages(groupId) {
   const lastRun = await query(
-    `SELECT MAX(updated_at) as last FROM sales_issues WHERE group_id = $1`,
+    `SELECT MAX(detected_at) as last FROM sales_issues WHERE group_id = $1`,
     [groupId]
   );
   const since = lastRun.rows[0]?.last ?? new Date(Date.now() - 24 * 60 * 60 * 1000);
@@ -74,7 +74,7 @@ async function getGroupsWithNewMessages() {
     `SELECT DISTINCT m.group_id
      FROM messages m
      LEFT JOIN (
-       SELECT group_id, MAX(updated_at) as last_run
+       SELECT group_id, MAX(detected_at) as last_run
        FROM sales_issues
        GROUP BY group_id
      ) s ON m.group_id = s.group_id
