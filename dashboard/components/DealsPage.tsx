@@ -6,6 +6,7 @@ import {
   AlertTriangle, Siren, CheckCircle2, BarChart2, Star,
   ChevronUp, ChevronDown, ChevronsUpDown, type LucideIcon,
 } from 'lucide-react';
+import type { SalesIssue, GroupQualityRow, DealsStats } from '@/types';
 
 const SEVERITY_STYLE: Record<string, { bg: string; color: string; label: string }> = {
   critical: { bg: '#fef2f2', color: '#b91c1c', label: 'Khẩn cấp' },
@@ -19,38 +20,10 @@ const STATUS_STYLE: Record<string, { bg: string; color: string; label: string }>
   resolved: { bg: '#f0fdf4', color: '#166534', label: 'Đã giải quyết' },
 };
 
-interface SalesIssue {
-  id: number;
-  group_id: string;
-  group_name: string | null;
-  issue_type: string;
-  severity: string;
-  title: string;
-  description: string | null;
-  evidence: string | null;
-  status: string;
-  detected_at: string;
-  resolved_at: string | null;
-}
-
-interface GroupRow {
-  group_id: string;
-  group_name: string | null;
-  msg_count: number;
-  open_issues: number;
-  critical: number;
-  high: number;
-  medium: number;
-  low: number;
-  ai_queries: number;
-  resolved_issues: number;
-  quality_score: number;
-}
-
 interface Props {
-  stats: { openCount: number; criticalCount: number; resolvedToday: number; totalAllTime: number; avgScore: number };
+  stats: DealsStats;
   issues: SalesIssue[];
-  groups: GroupRow[];
+  groups: GroupQualityRow[];
   aiInsight: string | null;
   dateFrom: string;
   dateTo: string;

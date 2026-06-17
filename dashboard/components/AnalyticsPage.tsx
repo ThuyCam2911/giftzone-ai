@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import WeekChart from './WeekChart';
+import { WeekChart } from '@/components/ui';
 import { MessageSquare, Zap, TrendingUp, FileText, Flame, HelpCircle, type LucideIcon } from 'lucide-react';
 
 interface Props {

@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyPassword, generateToken } from '@/lib/auth';
-
-const COOKIE_NAME = 'gz_session';
+import { verifyPassword, generateToken, COOKIE_NAME } from '@/lib/auth';
 
 export async function POST(req: NextRequest) {
   const { password } = await req.json();

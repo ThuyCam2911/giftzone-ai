@@ -1,41 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 import Sidebar from '@/components/Sidebar';
-import { query } from '@/lib/db';
-
-interface LogRow {
-  id: number;
-  group_id: string;
-  group_name: string | null;
-  query: string;
-  answer: string;
-  sources: string[];
-  latency_ms: number;
-  created_at: string;
-}
-
-async function getLogs(page = 1) {
-  const limit = 20;
-  const offset = (page - 1) * limit;
-  const [rows, total] = await Promise.all([
-    query<LogRow>(
-      `SELECT l.id, l.group_id, gn.name AS group_name, l.query, l.answer,
-              l.sources, l.latency_ms, l.created_at
-       FROM ai_logs l
-       LEFT JOIN group_names gn ON gn.group_id = l.group_id
-       ORDER BY l.created_at DESC LIMIT $1 OFFSET $2`,
-      [limit, offset]
-    ),
-    query<{ count: string }>(`SELECT COUNT(*) AS count FROM ai_logs`),
-  ]);
-  const totalCount = Number(total[0]?.count ?? 0);
-  return { rows, total: totalCount, totalPages: Math.ceil(totalCount / limit) };
-}
-
-function groupLabel(groupId: string, groupName: string | null) {
-  if (groupName) return groupName;
-  return `···${groupId.slice(-8)}`;
-}
+import { getLogs } from '@/lib/queries/logs';
 
 export default async function LogsPage({
   searchParams,
@@ -43,7 +9,7 @@ export default async function LogsPage({
   searchParams: Promise<{ page?: string }>;
 }) {
   const params = await searchParams;
-  const page = Number(params.page ?? 1);
+  const page   = Number(params.page ?? 1);
   const { rows, total, totalPages } = await getLogs(page);
 
   return (
@@ -54,6 +20,7 @@ export default async function LogsPage({
           <h1 className="text-lg font-bold text-gray-900">AI Logs</h1>
           <p className="text-xs text-gray-500 mt-0.5">{total} tổng số câu hỏi</p>
         </div>
+
         <div className="px-4 pb-8 md:px-8 pt-6">
           <div className="max-w-5xl">
             <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
