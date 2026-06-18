@@ -96,6 +96,7 @@ export async function initSchema() {
       ('agent_name',        $3, 'Tên hiển thị của AI agent trong Zalo'),
       ('skip_index',        $4, 'Bỏ qua index Drive khi khởi động (true/false)'),
       ('log_level',         $5, 'Mức log: debug / info / warn / error'),
+      ('admin_group_id',    '',        'Group ID nhận daily alert 8:00 AM (để trống = tắt alert)'),
       ('session_status',    'unknown', 'Trạng thái Zalo session: ok / warning / expired / unknown'),
       ('session_last_seen', '',        'Lần cuối session còn sống (ISO timestamp)')
     ON CONFLICT (key) DO NOTHING

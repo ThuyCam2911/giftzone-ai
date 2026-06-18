@@ -9,10 +9,11 @@ export interface AnalyticsData {
   latency: LatencyStats;
   days7: DayCount[];
   unanswered: QuestionRow[];
+  unansweredTotal: number;
 }
 
 export async function getAnalyticsData(): Promise<AnalyticsData> {
-  const [topQuestions, groupUsage, docUsage, latencyRows, chartRows, unanswered] = await Promise.all([
+  const [topQuestions, groupUsage, docUsage, latencyRows, chartRows, unanswered, unansweredCount] = await Promise.all([
     query<{ question: string; cnt: string }>(
       `SELECT query AS question, COUNT(*) AS cnt
        FROM ai_logs WHERE created_at >= NOW() - INTERVAL '7 days'
@@ -51,6 +52,11 @@ export async function getAnalyticsData(): Promise<AnalyticsData> {
          AND created_at >= NOW() - INTERVAL '7 days'
        GROUP BY query ORDER BY cnt DESC LIMIT 10`,
     ),
+    query<{ count: string }>(
+      `SELECT COUNT(*) AS count FROM ai_logs
+       WHERE answer ILIKE '%chưa có thông tin%'
+         AND created_at >= NOW() - INTERVAL '7 days'`,
+    ),
   ]);
 
   const raw = latencyRows[0];
@@ -71,6 +77,7 @@ export async function getAnalyticsData(): Promise<AnalyticsData> {
   }
 
   return {
+    unansweredTotal: Number(unansweredCount[0]?.count ?? 0),
     topQuestions: topQuestions.map(r => ({ question: r.question, cnt: Number(r.cnt) })),
     groupUsage:   groupUsage.map(r => ({
       group_id:   r.group_id,

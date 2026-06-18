@@ -1,8 +1,12 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { WeekChart } from '@/components/ui';
-import { MessageSquare, Zap, TrendingUp, FileText, Flame, HelpCircle, type LucideIcon } from 'lucide-react';
+import {
+  MessageSquare, Zap, TrendingUp, FileText, Flame, HelpCircle,
+  AlertCircle, type LucideIcon,
+} from 'lucide-react';
 
 interface Props {
   topQuestions: { question: string; cnt: number }[];
@@ -11,6 +15,7 @@ interface Props {
   latency: { p50: number; p95: number; maxMs: number; total: number };
   days7: { label: string; count: number }[];
   unanswered: { question: string; cnt: number }[];
+  unansweredTotal: number;
 }
 
 function sanitizeQuery(q: string) {
@@ -18,21 +23,28 @@ function sanitizeQuery(q: string) {
   return q.length > 100 ? q.slice(0, 100) + '…' : q;
 }
 
-export default function AnalyticsPage({ topQuestions, groupUsage, docUsage, latency, days7, unanswered }: Props) {
+export default function AnalyticsPage({
+  topQuestions, groupUsage, docUsage, latency, days7, unanswered, unansweredTotal,
+}: Props) {
   const [tab, setTab] = useState<'top' | 'unanswered'>('top');
 
   const totalWeek = days7.reduce((s, d) => s + d.count, 0);
   const uniqueDocs = docUsage.length;
+  const qualityPct = latency.total > 0
+    ? Math.round(((latency.total - unansweredTotal) / latency.total) * 100)
+    : 100;
+  const qualityColor = qualityPct >= 80 ? '#02AD64' : qualityPct >= 60 ? '#FF6900' : '#b91c1c';
+  const qualityBg    = qualityPct >= 80 ? '#e6f9f1' : qualityPct >= 60 ? '#fff3eb' : '#fef2f2';
 
   return (
     <>
       {/* ── KPI cards ── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         {([
-          { label: 'Câu hỏi / 7 ngày',  value: totalWeek,          Icon: MessageSquare, color: '#02AD64', bg: '#e6f9f1' },
-          { label: 'Latency p50',        value: `${latency.p50}ms`, Icon: Zap,           color: '#6366f1', bg: '#eef2ff' },
-          { label: 'Latency p95',        value: `${latency.p95}ms`, Icon: TrendingUp,    color: '#FF6900', bg: '#fff3eb' },
-          { label: 'Tài liệu được dùng', value: uniqueDocs,         Icon: FileText,      color: '#0ea5e9', bg: '#e0f2fe' },
+          { label: 'Câu hỏi / 7 ngày',  value: totalWeek,              Icon: MessageSquare, color: '#02AD64', bg: '#e6f9f1' },
+          { label: 'Latency p50',        value: `${latency.p50}ms`,     Icon: Zap,           color: '#6366f1', bg: '#eef2ff' },
+          { label: 'Latency p95',        value: `${latency.p95}ms`,     Icon: TrendingUp,    color: '#FF6900', bg: '#fff3eb' },
+          { label: 'Tài liệu được dùng', value: uniqueDocs,             Icon: FileText,      color: '#0ea5e9', bg: '#e0f2fe' },
         ] as { label: string; value: string | number; Icon: LucideIcon; color: string; bg: string }[]).map(card => (
           <div key={card.label} className="bg-white rounded-xl border border-gray-200 p-4">
             <div className="flex items-center justify-between mb-3">
@@ -44,6 +56,23 @@ export default function AnalyticsPage({ topQuestions, groupUsage, docUsage, late
             <p className="text-2xl font-bold" style={{ color: card.color }}>{card.value}</p>
           </div>
         ))}
+      </div>
+
+      {/* ── Quality score banner ── */}
+      <div className="bg-white rounded-xl border border-gray-200 px-5 py-4 mb-6 flex items-center justify-between gap-4">
+        <div>
+          <p className="text-sm font-semibold text-gray-800">Chất lượng phản hồi AI</p>
+          <p className="text-xs text-gray-400 mt-0.5">
+            {latency.total - unansweredTotal} / {latency.total} câu hỏi được trả lời đầy đủ trong 7 ngày qua
+          </p>
+        </div>
+        <div className="shrink-0 text-center">
+          <p className="text-3xl font-bold" style={{ color: qualityColor }}>{qualityPct}%</p>
+          <p className="text-[10px] mt-0.5 px-2 py-0.5 rounded-full font-medium"
+            style={{ background: qualityBg, color: qualityColor }}>
+            {qualityPct >= 80 ? 'Tốt' : qualityPct >= 60 ? 'Cần cải thiện' : 'Kém'}
+          </p>
+        </div>
       </div>
 
       {/* ── Volume chart ── */}
@@ -65,7 +94,13 @@ export default function AnalyticsPage({ topQuestions, groupUsage, docUsage, late
             >
               {t === 'top'
                 ? <span className="flex items-center gap-1.5"><Flame size={13} />Hay hỏi nhất</span>
-                : <span className="flex items-center gap-1.5"><HelpCircle size={13} />AI chưa biết</span>
+                : <span className="flex items-center gap-1.5">
+                    <HelpCircle size={13} />AI chưa biết
+                    {unansweredTotal > 0 && (
+                      <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold"
+                        style={{ background: '#fef2f2', color: '#b91c1c' }}>{unansweredTotal}</span>
+                    )}
+                  </span>
               }
             </button>
           ))}
@@ -78,7 +113,22 @@ export default function AnalyticsPage({ topQuestions, groupUsage, docUsage, late
           <QuestionList items={topQuestions} emptyText="Chưa có dữ liệu — agent sẽ tổng hợp khi Sales bắt đầu hỏi." />
         )}
         {tab === 'unanswered' && (
-          <QuestionList items={unanswered} emptyText="Không có câu hỏi nào ngoài tầm hiểu biết — tốt lắm!" />
+          <>
+            {unansweredTotal > 0 && (
+              <div className="flex items-start gap-3 px-4 py-3 bg-amber-50 border-b border-amber-100">
+                <AlertCircle size={14} className="text-amber-500 mt-0.5 shrink-0" />
+                <div className="flex-1">
+                  <p className="text-xs font-medium text-amber-800">
+                    AI chưa có thông tin để trả lời {unansweredTotal} câu hỏi này
+                  </p>
+                  <p className="text-xs text-amber-600 mt-0.5">
+                    Thêm tài liệu liên quan vào Google Drive để cải thiện chất lượng phản hồi.
+                  </p>
+                </div>
+              </div>
+            )}
+            <QuestionList items={unanswered} emptyText="Không có câu hỏi nào ngoài tầm hiểu biết — tốt lắm!" />
+          </>
         )}
       </div>
 
@@ -95,9 +145,13 @@ export default function AnalyticsPage({ topQuestions, groupUsage, docUsage, late
             <ul className="divide-y divide-gray-50">
               {groupUsage.map(g => (
                 <li key={g.group_id} className="flex items-center gap-3 px-4 py-3">
-                  {g.group_name
-                    ? <span className="text-xs font-medium text-gray-700 shrink-0 max-w-[120px] truncate">{g.group_name}</span>
-                    : <span className="font-mono text-xs text-gray-400 shrink-0">···{g.group_id.slice(-8)}</span>}
+                  <Link
+                    href={`/groups/${g.group_id}`}
+                    className="text-xs font-medium shrink-0 max-w-[120px] truncate hover:underline"
+                    style={{ color: '#018a4e' }}
+                  >
+                    {g.group_name ?? `···${g.group_id.slice(-8)}`}
+                  </Link>
                   <div className="flex-1 min-w-0">
                     <div className="h-1.5 rounded-full bg-gray-100">
                       <div className="h-full rounded-full" style={{

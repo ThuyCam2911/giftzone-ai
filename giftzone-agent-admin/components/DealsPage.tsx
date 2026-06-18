@@ -212,9 +212,11 @@ export default function DealsPage({ stats, issues, groups, aiInsight, dateFrom, 
                         return (
                           <tr key={g.group_id} className="hover:bg-gray-50">
                             <td className="px-4 py-3 text-xs">
-                              {g.group_name
-                                ? <span className="text-gray-800 font-medium">{g.group_name}</span>
-                                : <span className="font-mono text-gray-400">···{g.group_id.slice(-8)}</span>}
+                              <a href={`/groups/${g.group_id}`}
+                                className="hover:underline font-medium"
+                                style={{ color: '#018a4e' }}>
+                                {g.group_name ?? `···${g.group_id.slice(-8)}`}
+                              </a>
                             </td>
                             <td className="px-4 py-3 text-gray-700 font-medium">{g.msg_count.toLocaleString()}</td>
                             <td className="px-4 py-3">

@@ -11,6 +11,7 @@ import { GroupListener } from './zalo/listener.js';
 import { MentionResponder } from './zalo/responder.js';
 import { startSummaryEngine } from './summary/engine.js';
 import { startDealAnalyzer } from './deal/analyzer.js';
+import { startDailyAlert } from './alert/daily.js';
 import { indexAll, startAutoSync } from './rag/indexer.js';
 import { initSchema } from './utils/db.js';
 import { loadConfig, getConfig } from './utils/config.js';
@@ -81,6 +82,9 @@ async function main() {
       log.info('Summary Engine tắt (ENABLE_SUMMARY=false)');
     }
     startAutoSync().catch(err => log.warn('Auto-sync lỗi', err.message));
+
+    // Daily morning alert
+    startDailyAlert(api);
   }
 
   if (process.env.ENABLE_DEAL_ANALYSIS === 'true') {
