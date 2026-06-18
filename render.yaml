@@ -2,7 +2,7 @@ services:
   - type: web
     name: giftzone-agent
     runtime: node
-    rootDir: agent
+    rootDir: giftzone-agent-backend
     buildCommand: npm install
     startCommand: npm start
     plan: free

@@ -2,172 +2,45 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Commands
+---
 
-### Agent (production code)
-```bash
-cd agent
-npm install
-npm run dev          # run with --watch (auto-restart on file change)
-npm start            # run normally
-npm run index:drive  # index Google Drive documents into pgvector (run after quota resets)
+## Monorepo Structure
+
+```
+giftzone-agent/
+├── giftzone-agent-backend/   # Node.js ESM agent (Zalo AI + RAG + Deal Analyzer)
+├── giftzone-agent-admin/     # Next.js 14 App Router admin dashboard
+├── spike/                    # Throwaway proof-of-concept scripts
+├── render.yaml               # Render deploy config (backend only)
+└── CLAUDE.md
 ```
 
-Set `SKIP_INDEX=true` in `.env` to skip Drive indexing on startup (useful when Gemini embedding quota is exhausted).
-
-### Spike (proof-of-concept scripts)
-```bash
-cd spike
-npm run auth:drive   # OAuth2 flow — get Google refresh_token, writes to .env automatically
-node zalo/mention-test.js    # test @mention detection in live Zalo group
-node pgvector/pgvector-spike.js
-```
-
-### Infrastructure
-```bash
-# Local dev: pgvector runs on port 5433 (5432 was busy)
-docker run -d -p 5433:5432 -e POSTGRES_PASSWORD=postgres pgvector/pgvector:pg16
-
-# Production: Supabase (pgvector built-in, free tier)
-# Enable extension: SQL Editor → CREATE EXTENSION IF NOT EXISTS vector;
-# Connection: Settings → Database → Session pooler (port 5432)
-# User format: postgres.[PROJECT_REF] (required for pooler tenant routing)
-```
-
-## Project Status (cập nhật 2026-06-16)
-
-### Đã hoàn thành
-- **Agent core**: RAG pipeline hoàn chỉnh — Drive indexing, pgvector search, Gemini chat
-- **Agent reply UX**: Không thinking message, không source citation trong reply
-- **Chat 1:1 Zalo**: `listener.js` xử lý `MessageType.DirectMessage` — Sales nhắn thẳng cho agent không cần @mention
-- **DB-backed config**: Bảng `settings` là source of truth; `utils/config.js` cung cấp `getConfig/setConfig`
-- **Zalo session health**: `session.js` ghi `session_status` và `session_last_seen` vào `settings`
-- **Cookie auto-refresh**: `cookie-extractor.js` đọc Chrome SQLite + decrypt AES-128-CBC, cron 3:00 AM hàng ngày; `better-sqlite3` là optional dep (không crash trên server)
-- **Dashboard** (`/dashboard`): Next.js 14 App Router — deploy tại `giftzone-ai.vercel.app`
-  - Auth: password → `gz_session` cookie
-  - Overview: 4 KPI cards + bar chart 7 ngày + health panel + top questions + recent queries; `force-dynamic` để luôn fetch data mới
-  - AI Logs: bảng paginated, filter date/group
-  - Knowledge Base: danh sách file đã index + chat RAG trực tiếp + stats (top questions, unanswered, doc usage)
-  - Settings: edit config keys + textarea zalo_cookie
-  - Deals: funnel stats + group breakdown + recent events + AI insight
-  - Design: brand colors `#02AD64` (xanh) + `#FF6900` (cam), sidebar gradient, card shadows, pulse animation
-- **Database**: Supabase (pgvector built-in, free tier); Session Pooler port 5432; bảng `deals` + `deal_events` đã tạo
-- **2 Render services**: `giftzone-ai` (Sales AI, account 1) + `giftzone-deal-monitor` (Deal Monitor, account 2) — cả 2 đang chạy
-- **Deal Analyzer**: cron 15 phút, OpenRouter `meta-llama/llama-3.3-70b-instruct:free`, detect deal stage từ messages, 60s delay giữa groups tránh 429
-- **ENV cookie priority**: `session.js` ưu tiên `ZALO_COOKIE` ENV trước DB — tránh stale DB cookie override khi deploy
-
-### Trạng thái từng phần
-
-| Phần | Trạng thái | Ghi chú |
-|------|-----------|---------|
-| Agent RAG | ✅ Production | Model: `gemini-2.5-flash-lite`, dim 1536 |
-| Agent reply format | ✅ | Không thinking msg, không source citation |
-| Chat 1:1 Zalo | ✅ Production | `MessageType.DirectMessage`, không cần @mention |
-| Chat group @mention | ✅ Production | Vẫn cần @mention trong group |
-| Agent summary engine | ✅ | Cron 18:00 T2-T6, `gemini-1.5-flash` |
-| Cookie auto-refresh | ✅ | Cron 3AM, đọc Chrome SQLite; chỉ chạy trên máy local có Chrome |
-| Deal Analyzer | ✅ Production | Cron 15 phút, llama-3.3-70b, 60s delay/group, min 5 msgs |
-| Agent deploy giftzone-ai | ✅ Production | Account 1, nghe nhóm sales nội bộ, reply @mention + 1:1 |
-| Agent deploy giftzone-deal-monitor | ✅ Production | Account 2, nghe nhóm sales-khách hàng, log messages + analyze deals |
-| Dashboard auth | ✅ | Simple password, cookie-based |
-| Dashboard overview | ✅ | Chart 7 ngày, health, top questions, force-dynamic |
-| Dashboard logs | ✅ | Paginated, filter date/group |
-| Dashboard knowledge base | ✅ | File list + RAG chat + stats |
-| Dashboard settings | ✅ | Edit config + zalo_cookie |
-| Dashboard deals | ✅ | Funnel stats, group breakdown, recent events, AI insight |
-| Database | ✅ Supabase | pgvector enabled, tất cả bảng sẵn sàng |
-| Dashboard deploy | ✅ Vercel | `giftzone-ai.vercel.app` |
-| Analytics page (spec §5.3) | ⏳ Chưa làm | Top questions đã có trong Overview/KB; full analytics page chưa |
-
-### Bước tiếp theo
-1. **Verify deals data** — sáng hôm sau kiểm tra bảng `deals` trên Supabase có được populate từ deal analyzer không
-2. **Analytics page** — màn hình top questions theo group, doc usage timeline (spec §5.3)
-3. **Cookie tự động cho Render** — hiện tại khi cookie expire phải thủ công lấy lại và paste lên Render. Cần quy trình hoặc tool để update cookie dễ hơn (Dashboard Settings → paste → tự restart?)
-4. **Deal Monitor reply** — account 2 hiện tại reply khi bị @mention trong nhóm khách. Cân nhắc có nên tắt reply, chỉ log và analyze thôi
-
-### Quyết định quan trọng đã chốt
-- **Không có thinking message**: UX tốt hơn trên Zalo mobile; Gemini đủ nhanh
-- **Không trích dẫn nguồn trong reply**: Reply sạch hơn — đã bỏ khỏi cả `responder.js` và `retriever.js` SYSTEM_PROMPT
-- **Chat model**: `gemini-2.5-flash-lite` (nhanh hơn, miễn phí)
-- **Chat 1:1 dùng `MessageType.DirectMessage`**: zca-js enum là `DirectMessage=0`, không phải `UserMessage` — nhầm type này sẽ không nhận được tin nhắn
-- **Render Free Web Service thay Background Worker**: Background Worker không còn free tier (2024); Web Service free + cron-job.org ping mỗi 14 phút để tránh sleep
-- **`better-sqlite3` là optionalDependencies**: Native module chỉ cần trên máy local có Chrome; không crash khi build trên Render
-- **Cookie extractor KHÔNG chạy lúc startup**: Tránh ghi đè cookie cũ bằng cookie rỗng khi Chrome chưa có session `chat.zalo.me` — chỉ chạy qua cron 3AM
-- **Cookie extractor safety check**: Phải có `zpsid`/`zpw_sek` và ≥3 cookies trước khi ghi DB — tránh lưu array rỗng
-- **Supabase Session Pooler**: Dùng `postgres.[PROJECT_REF]` làm username (tenant routing); không dùng Transaction Pooler vì pgvector HNSW cần persistent connection
-- **`force-dynamic` trên overview page**: Next.js App Router cache server components theo mặc định → data không cập nhật khi reload; `export const dynamic = 'force-dynamic'` fix điều này
-- **`unstable_cache` cho performance**: `force-dynamic` làm mỗi request hit DB; thêm `unstable_cache` TTL 60s (overview) và 30s (logs) để nhiều request trong cùng window dùng chung 1 DB hit
-- **Supabase pool limits**: Free tier giới hạn 15 connections; dashboard pool `max: 2`, agent pool `max: 5` — tổng tối đa 7, an toàn cho Vercel serverless (nhiều instances)
-- **Timezone display**: Vercel serverless dùng UTC, `toLocaleString()` không có `timeZone` option → giờ hiển thị sai. Fix: tất cả date/time display phải có `timeZone: 'Asia/Ho_Chi_Minh'`
-- **WeekChart là client component**: Bar chart cần hover state → phải dùng `'use client'` + `useState`; server component không thể có interactivity
-- **Dashboard là regular directory**: Vercel không clone git submodule → đã convert `dashboard/` thành regular files
-- **GitHub SSH remote**: HTTPS bị 403 do account mismatch (Thuy-Cam vs ThuyCam2911) → dùng SSH
-- **Zalo cookie IP binding**: Cookie mới tạo từ máy local VN bị Zalo reject khi gọi từ Render US IP. Cookie cũ đã được trust thì tiếp tục hoạt động. Khi update cookie: phải dùng cookie từ session đã chạy ổn định, KHÔNG tạo session mới từ local rồi paste lên Render.
-- **ENV cookie priority over DB**: `session.js` đọc `process.env.ZALO_COOKIE` trước, DB sau — tránh stale DB cookie override fresh ENV. Trước đây DB > ENV gây bug nghiêm trọng khi deploy với credentials mới.
-- **`initSchema` KHÔNG seed `zalo_cookie`**: Trước đây `initSchema` insert `zalo_cookie` từ ENV vào DB (ON CONFLICT DO NOTHING). Khi xóa row và deploy lại, nó re-insert cookie cũ vào DB và DB lại override ENV. Đã bỏ dòng seed này.
-- **Deal Monitor architecture**: 2 Zalo accounts — account 1 (Sales AI) trong nhóm nội bộ sales, account 2 (Deal Monitor) trong nhóm sales-khách hàng. Deal Analyzer cron đọc messages từ DB để detect deal stage.
-- **OpenRouter model**: `meta-llama/llama-3.3-70b-instruct:free` — `nvidia/nemotron-ultra-253b-v1:free` đã bị xóa khỏi OpenRouter
-- **Deal analyzer rate limit**: OpenRouter free tier ~3-6 req/phút. Fix: 60s delay giữa mỗi group, min 5 messages trước khi gọi API. Cron 15 phút đủ thời gian analyze 4-5 groups.
-- **`deal_key` format**: LLM trả về `tên_khách_viết_liền_không_dấu` (không có group_id prefix), code `upsertDeal` tự prepend `${groupId}__`. Trước đây prompt bảo LLM include group_id → double prefix bug.
-- **`PG_DATABASE` bắt buộc trên Render**: Default trong `db.js` là `giftzone_agent` (local Docker). Render phải set `PG_DATABASE=postgres` — nếu thiếu agent connect sai DB, messages không được lưu dù agent vẫn reply được (Retriever cache).
-- **`Another connection is opened`**: Zalo chỉ cho 1 web connection/account. Phải đóng tất cả tab `chat.zalo.me` trước khi deploy Render. Render rolling deploy cũng có thể trigger lỗi này — thường tự resolve sau vài phút.
+> Backend and admin do **not** share code — different runtimes (Node.js ESM vs Next.js TS). They share the same Supabase database.
 
 ---
 
-## Architecture
+## Commands
 
-Monorepo với ba packages:
-- `/agent` — production agent (Node.js ESM, `"type": "module"`)
-- `/dashboard` — Next.js 14 App Router, quản lý agent qua UI
-- `/spike` — throwaway validation scripts
-
-### Agent startup sequence (`src/index.js`)
-1. `initSchema()` — creates pgvector tables/HNSW index if not exist
-2. `SessionManager.login()` — Zalo login via zca-js
-3. `indexAll()` — indexes Google Drive docs into pgvector (runs in background, non-blocking); skipped if `SKIP_INDEX=true`
-4. `GroupListener` + `MentionResponder` — Zalo WebSocket listener
-5. `startSummaryEngine()` + `startAutoSync()` — cron jobs
-6. HTTP health server trên `PORT` (default 3000) — giữ Render Free không sleep
-7. Cookie refresh cron 3:00 AM hàng ngày (chỉ hiệu quả trên máy local có Chrome)
-
-### Key modules
-- **`src/zalo/session.js`** — `SessionManager`: wraps zca-js login, đọc cookie từ DB `settings.zalo_cookie` trước rồi fallback `.env`; health-checks every 30min via `getOwnId()`, calls `onExpired` → `process.exit(1)`
-- **`src/zalo/listener.js`** — `GroupListener`: xử lý cả `DirectMessage` (1:1, không cần @mention) lẫn `GroupMessage` (@mention required); strips @mention tokens by pos/len offsets; emit `onMention(ctx)` với flag `isDirect`
-- **`src/zalo/responder.js`** — `MentionResponder`: dùng `MessageType.DirectMessage` khi `ctx.isDirect=true`, `GroupMessage` khi false; calls `answer()` trực tiếp, logs to `ai_logs`
-- **`src/utils/cookie-extractor.js`** — đọc Chrome SQLite (`~/Library/.../Cookies`), decrypt AES-128-CBC dùng macOS Keychain key, filter lấy `.zalo.me` cookies, lưu vào `settings.zalo_cookie`; safety: cần `zpsid`/`zpw_sek` + ≥3 cookies
-- **`src/rag/embedder.js`** — Gemini `gemini-embedding-001`, `outputDimensionality: 1536` (default 3072 exceeds HNSW 2000-dim limit), exponential backoff on 429
-- **`src/rag/indexer.js`** — fetches Drive folder/file, exports Google-native files to CSV/text, chunks (600 words, 60 overlap), embeds sequentially with **600ms delay between chunks** (critical for free-tier rate limit), upserts to `doc_chunks`; polls Drive Changes API every 15min for auto-sync
-- **`src/rag/retriever.js`** — embeds query, cosine similarity search (`<=>`) top-5 chunks, builds Gemini prompt with context, returns answer + source file names
-- **`src/summary/engine.js`** — cron: daily 18:00 Mon–Fri, weekly Fri 17:00; queries `messages` table per group, generates Vietnamese summary via `gemini-1.5-flash`
-- **`src/utils/db.js`** — pg Pool on `PG_PORT` (default 5433); `initSchema()` creates `doc_chunks`, `ai_logs`, `messages`, `settings` tables
-- **`src/utils/config.js`** — `getConfig(key, default)` / `setConfig(key, value)`: đọc/ghi bảng `settings` với in-memory cache; agent đọc config từ đây thay vì `.env` trực tiếp
-- **`src/utils/logger.js`** — `createLogger('Name')`: chalk-colored logger, respects `LOG_LEVEL` env var (debug/info/warn/error)
-
-### Database schema (pgvector)
-- `doc_chunks(file_id, file_name, chunk_index, content, embedding vector(1536))` — HNSW index `m=16, ef_construction=64`
-- `ai_logs(group_id, sender_uid, query, answer, sources JSONB, latency_ms)`
-- `messages(group_id, sender_uid, sender_name, content, msg_ts)`
-
-### Zalo session constraints
-- **ONE web connection at a time** — browser must NOT have `chat.zalo.me` open while agent runs
-- Cookie expires periodically; re-extract from `chat.zalo.me` → update `ZALO_COOKIE` in `.env` → restart
-- `selfListen: false` in production (prevents echo loop)
-- Cookie format: J2TEAM array `[{name,value,...}]` — `parseCookie()` handles both array and object formats
-
-### AI stack (all free-tier)
-- **Chat (RAG reply)**: `gemini-2.5-flash-lite` via `@google/generative-ai`
-- **Summary**: `gemini-1.5-flash`
-- **Embeddings**: `gemini-embedding-001`, `outputDimensionality: 1536`
-- Gemini free tier has daily embedding quota — resets ~7:00 AM Vietnam time; if exhausted use `SKIP_INDEX=true` and run `npm run index:drive` after reset
-
-### Dashboard (`/dashboard`)
+### Backend
 ```bash
-cd dashboard
+cd giftzone-agent-backend
 npm install
-npm run dev   # port 3001
+npm run dev          # --watch, auto-restart on file change
+npm start            # production
+npm run index:drive  # manually re-index Google Drive (after Gemini quota resets)
 ```
 
-ENV file: `dashboard/.env.local` (local dev)
+Set `SKIP_INDEX=true` in `.env` to skip Drive indexing on startup.
+
+### Admin (Dashboard)
+```bash
+cd giftzone-agent-admin
+npm install
+npm run dev          # port 3000 (Next.js default)
+npm run build        # production build
+```
+
+ENV file: `giftzone-agent-admin/.env.local`
 ```
 DASHBOARD_PASSWORD=...
 SESSION_SECRET=...
@@ -178,6 +51,161 @@ PG_USER=postgres
 PG_PASSWORD=postgres
 ```
 
+### Spike
+```bash
+cd spike
+npm run auth:drive         # OAuth2 flow — get Google refresh_token
+node zalo/mention-test.js  # test @mention detection in live Zalo group
+node pgvector/pgvector-spike.js
+```
+
+### Infrastructure
+```bash
+# Local: pgvector on port 5433 (5432 was taken)
+docker run -d -p 5433:5432 -e POSTGRES_PASSWORD=postgres pgvector/pgvector:pg16
+
+# Production: Supabase (pgvector built-in, free tier)
+# Enable: SQL Editor → CREATE EXTENSION IF NOT EXISTS vector;
+# Connection: Settings → Database → Session pooler (port 5432)
+# Username format: postgres.[PROJECT_REF] (required for pooler tenant routing)
+```
+
+---
+
+## Architecture
+
+### Backend (`giftzone-agent-backend/src/`)
+
+```
+src/
+├── index.js              # Startup sequence
+├── zalo/
+│   ├── session.js        # Zalo login + health check
+│   ├── listener.js       # WebSocket message handler
+│   └── responder.js      # AI reply dispatcher
+├── rag/
+│   ├── embedder.js       # Gemini embedding-001, dim 1536
+│   ├── indexer.js        # Google Drive → pgvector
+│   └── retriever.js      # Cosine search + Gemini chat
+├── deal/
+│   └── analyzer.js       # Issue detection cron (15min, OpenRouter)
+├── summary/
+│   └── engine.js         # Daily group summary cron (18:00 Mon–Fri)
+└── utils/
+    ├── db.js             # pg Pool + initSchema()
+    ├── config.js         # getConfig/setConfig via settings table
+    ├── logger.js         # chalk logger, respects LOG_LEVEL
+    └── cookie-extractor.js  # Chrome SQLite → Zalo cookie (local only)
+```
+
+**Startup sequence (`src/index.js`)**
+1. `initSchema()` — create pgvector tables + HNSW index if not exist
+2. `SessionManager.login()` — Zalo login via zca-js
+3. `indexAll()` — index Google Drive docs (background, skipped if `SKIP_INDEX=true`)
+4. `GroupListener` + `MentionResponder` — Zalo WebSocket
+5. `startSummaryEngine()` + `startAutoSync()` — cron jobs
+6. HTTP health server on `PORT` (default 3000) — keeps Render Free alive
+7. Cookie refresh cron 3:00 AM (local machine with Chrome only)
+
+**Key module notes**
+- `session.js` — reads `ZALO_COOKIE` from ENV first, DB fallback; health-checks every 30min via `getOwnId()`, calls `onExpired` → `process.exit(1)`
+- `listener.js` — handles `DirectMessage` (1:1, no @mention needed) and `GroupMessage` (@mention required); emits `onMention(ctx)` with `isDirect` flag
+- `responder.js` — uses `MessageType.DirectMessage` when `ctx.isDirect=true`, `GroupMessage` otherwise; calls `answer()` directly, no thinking message, no source citation
+- `embedder.js` — `outputDimensionality: 1536` (HNSW limit is 2000; default 3072 exceeds it); exponential backoff on 429
+- `indexer.js` — 600ms delay between chunks (critical for free-tier rate limit); polls Drive Changes API every 15min
+- `analyzer.js` — model fallback chain; XML tags around conversation to prevent prompt injection; 60s delay between groups; `[GZ]`/`[KH]` role tagging from `gz_members` table (no-op if table empty)
+- `cookie-extractor.js` — safety: requires `zpsid`/`zpw_sek` and ≥3 cookies before writing DB; does NOT run at startup
+
+### Admin (`giftzone-agent-admin/`)
+
+```
+app/
+├── api/                  # Next.js API routes (backend-for-frontend)
+│   ├── auth/
+│   ├── config/
+│   ├── groups/
+│   ├── gz-members/
+│   ├── knowledge/
+│   ├── logs/
+│   └── overview/
+├── analytics/
+├── deals/
+├── groups/
+├── knowledge-base/
+├── logs/
+├── overview/
+└── settings/
+components/
+├── ui/                   # Reusable UI primitives (StatsCard, WeekChart)
+├── Sidebar.tsx
+├── AnalyticsPage.tsx
+├── DealsPage.tsx
+├── GZMemberManager.tsx
+├── GroupTypeManager.tsx
+├── SettingsForm.tsx
+└── SessionAlert.tsx
+lib/
+├── db.ts                 # pg Pool (separate from backend, avoids ESM/CJS conflict)
+├── auth.ts               # HMAC-SHA256 token, gz_session cookie
+├── utils.ts
+└── queries/              # All DB queries isolated here — pages never write SQL directly
+    ├── overview.ts
+    ├── logs.ts
+    ├── deals.ts
+    └── analytics.ts
+types/
+└── index.ts
+```
+
+**Admin conventions**
+- `export const dynamic = 'force-dynamic'` on every page with DB queries (prevents Next.js build-time prerender crash)
+- All date/time display must include `timeZone: 'Asia/Ho_Chi_Minh'` (Vercel runs UTC)
+- DB queries belong in `lib/queries/` — never inline SQL in page components
+- Pool `max: 2` (Supabase free tier: 15 connections total; backend uses max 5)
+
+### Database Schema (Supabase / pgvector)
+
+| Table | Purpose |
+|-------|---------|
+| `doc_chunks` | RAG chunks — `embedding vector(1536)`, HNSW `m=16, ef_construction=64` |
+| `ai_logs` | AI query/answer log — `sources JSONB`, `latency_ms` |
+| `messages` | All Zalo messages (group + 1:1) |
+| `settings` | DB-backed config (source of truth over `.env` for most keys) |
+| `group_names` | Zalo group metadata + `group_type` (internal/customer) |
+| `gz_members` | GiftZone team UIDs — used by analyzer to tag `[GZ]` vs `[KH]` |
+| `deals` | Deal tracking per customer per group |
+| `deal_events` | Deal stage change history |
+| `sales_issues` | Quality issues detected by analyzer (open/resolved) |
+
+All timestamps: `TIMESTAMPTZ`. Group/User IDs: `TEXT` (Zalo IDs are large numbers, string is safer).
+
+### AI Stack (all free-tier)
+
+| Role | Model | Notes |
+|------|-------|-------|
+| RAG chat | `gemini-2.5-flash-lite` | via `@google/generative-ai` |
+| Summary | `gemini-1.5-flash` | daily group summary |
+| Embeddings | `gemini-embedding-001` | `outputDimensionality: 1536` |
+| Issue detection | `meta-llama/llama-3.3-70b-instruct:free` | via OpenRouter, fallback chain |
+
+Gemini embedding quota resets ~7:00 AM Vietnam time. If exhausted: set `SKIP_INDEX=true`, restart, run `npm run index:drive` after reset.
+
+### Zalo Session Constraints
+
+- **One web connection per account** — close all `chat.zalo.me` tabs before deploying
+- Cookie is IP-bound — do NOT create a new session from local VN machine then paste to Render US server; use cookies from an already-trusted session
+- `selfListen: false` in production (prevents echo loop)
+- Cookie format: J2TEAM array `[{name,value,...}]` — `parseCookie()` handles both array and object
+
+### Deploy
+
+| Service | Platform | Config |
+|---------|----------|--------|
+| Backend (Sales AI) | Render — `giftzone-ai` | `render.yaml`, account 1, internal sales groups |
+| Backend (Deal Monitor) | Render — `giftzone-deal-monitor` | manual, account 2, customer groups |
+| Admin Dashboard | Vercel — `giftzone-ai.vercel.app` | root dir: `giftzone-agent-admin` |
+| Database | Supabase | project ref: `ytvcmkczealtlvapjjke`, Session Pooler port 5432 |
+
 Vercel env vars (production):
 ```
 DATABASE_URL=postgresql://postgres.[PROJECT_REF]:[PASSWORD]@aws-1-...pooler.supabase.com:5432/postgres
@@ -185,33 +213,88 @@ DASHBOARD_PASSWORD=...
 SESSION_SECRET=...
 ```
 
-- Auth: `POST /api/auth` → cookie `gz_session`; `middleware.ts` bảo vệ tất cả routes trừ `/login`
-- Token: `Buffer.from(password + secret).toString('base64')` — không cần JWT
-- `lib/db.ts` — pg Pool riêng, KHÔNG import từ agent (tránh ESM/CJS conflict)
+---
 
-### Known bugs fixed
-- `indexer.js`: 600ms inter-chunk delay must be in the `indexFile()` loop, NOT assumed to be inside `embed()` — missing delay was root cause of quota exhaustion
-- `indexer.js`: guard `process.argv[1]?.endsWith()` — was crashing when imported as module
-- `listener.js`: local `userQuery` var (was named `query`, shadowing the db import)
-- `responder.js`: đã bỏ thinking message và source citation suffix — reply đến thẳng từ `answer()`
-- `retriever.js` SYSTEM_PROMPT: đã bỏ "Luôn trích dẫn nguồn" và thêm "KHÔNG trích dẫn nguồn hay số thứ tự" — ngăn Gemini tự thêm "Theo [1]" trong reply
-- `summary/engine.js`: `query()` trả về array trực tiếp nhưng code dùng `const { rows } = await query()` → `rows = undefined` → summary engine crash silently từ đầu. Fix: `fetchMessages` return trực tiếp, `getActiveGroups` dùng `const rows = await query()`
-- `dashboard/app/overview/page.tsx`: PostgreSQL `DATE()` trả về Date object; chart key dùng string → không match. Fix: `new Date(r.day).toISOString().slice(0, 10)`
-- **Timezone chart key**: Sau nửa đêm VN (00:00–07:00) UTC date là ngày hôm trước → key sai. Fix: `sv-SE` locale với `timeZone: 'Asia/Ho_Chi_Minh'` cho YYYY-MM-DD keys
-- **Vercel prerender error**: Next.js App Router prerender pages với DB calls lúc build time → crash. Fix: `export const dynamic = 'force-dynamic'` trên tất cả pages có DB query (overview, logs, settings, knowledge-base)
+## Environment Variables
 
-### Environment variables (agent/.env)
+### Backend (`giftzone-agent-backend/.env`)
 ```
-ZALO_IMEI, ZALO_COOKIE, ZALO_USER_AGENT
+ZALO_IMEI
+ZALO_COOKIE          # ENV takes priority over DB value
+ZALO_USER_AGENT
 ZALO_TEST_GROUP_ID
-GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REFRESH_TOKEN
-DRIVE_FOLDER_ID          # can be a folder OR a single file ID
-PG_HOST, PG_PORT=5433, PG_DATABASE, PG_USER, PG_PASSWORD
+GOOGLE_CLIENT_ID
+GOOGLE_CLIENT_SECRET
+GOOGLE_REFRESH_TOKEN
+DRIVE_FOLDER_ID      # folder OR single file ID
 GEMINI_API_KEY
+OPENROUTER_API_KEY
+PG_HOST
+PG_PORT=5433
+PG_DATABASE          # must set PG_DATABASE=postgres on Render (default is giftzone_agent for local Docker)
+PG_USER
+PG_PASSWORD
 AGENT_NAME=GiftZone AI
-SUMMARY_CRON             # default: "0 18 * * 1-5"
-SKIP_INDEX               # set "true" to skip Drive indexing at startup
-LOG_LEVEL                # default: "info" (options: debug/info/warn/error)
+SUMMARY_CRON         # default: "0 18 * * 1-5"
+SKIP_INDEX           # "true" to skip Drive indexing at startup
+LOG_LEVEL            # debug / info / warn / error (default: info)
 ```
 
-⚠️ `agent/.env` and `spike/.env` contain live Zalo session cookies — never commit.
+⚠️ `giftzone-agent-backend/.env` and `spike/.env` contain live Zalo session cookies — **never commit**.
+
+---
+
+## Critical Decisions Log
+
+### Zalo / Cookie
+- **ENV cookie priority over DB**: `session.js` reads `process.env.ZALO_COOKIE` first — DB stale cookie must never override a fresh ENV value
+- **`initSchema` does NOT seed `zalo_cookie`**: Seeding caused re-insert of old cookie on redeploy, which then overrode ENV
+- **Cookie extractor does NOT run at startup**: Would overwrite valid DB cookie with empty array if Chrome has no `chat.zalo.me` session
+- **IP binding**: New cookies from local VN IP are rejected by Render US IP. Always reuse cookies from an already-running trusted session
+- **`Another connection is opened`**: Close all `chat.zalo.me` tabs → restart. Render rolling deploy may also trigger — usually self-resolves
+
+### Backend
+- **No thinking message**: Better UX on Zalo mobile; Gemini is fast enough
+- **No source citation in reply**: Cleaner replies — removed from `responder.js` and `retriever.js` SYSTEM_PROMPT
+- **`MessageType.DirectMessage` for 1:1**: zca-js enum is `DirectMessage=0`, NOT `UserMessage` — wrong type = no messages received
+- **`PG_DATABASE` required on Render**: Default `giftzone_agent` only exists in local Docker; Render needs `PG_DATABASE=postgres`
+- **`better-sqlite3` is `optionalDependencies`**: Native module needed only on local Mac with Chrome; must not crash on Render build
+
+### Deal Analyzer
+- **OpenRouter fallback chain**: Free models get rate-limited; code tries models in sequence
+- **60s delay between groups**: OpenRouter free tier ~3-6 req/min
+- **`deal_key` format**: LLM returns `customer_name_no_accents`, code prepends `${groupId}__` — do NOT include group_id in prompt (causes double prefix)
+- **`gz_members` role tagging**: Empty table = no tags = behavior identical to before (safe default)
+- **Prompt injection guard**: Conversation wrapped in `<conversation>...</conversation>` XML tags
+
+### Admin / Dashboard
+- **`force-dynamic`**: Required on all pages with DB queries — prevents Next.js build-time prerender crash
+- **Timezone**: All date display needs `timeZone: 'Asia/Ho_Chi_Minh'` (Vercel runs UTC)
+- **HMAC-SHA256 auth token**: `createHmac('sha256', secret).update(password).digest('hex')` — not reversible base64
+- **`lib/queries/` pattern**: All SQL isolated in `lib/queries/` — pages only call typed functions
+- **Supabase Session Pooler**: Use `postgres.[PROJECT_REF]` as username; Transaction Pooler breaks pgvector HNSW
+- **`giftzone-agent-admin` is a regular directory**: Vercel does not clone git submodules — already converted
+
+### Infrastructure
+- **Render Free Web Service** (not Background Worker): Background Worker lost free tier in 2024; use Web Service + cron-job.org ping every 14min to prevent sleep
+- **GitHub SSH remote**: HTTPS returns 403 due to account mismatch (Thuy-Cam vs ThuyCam2911)
+- **2 Render accounts**: Account 1 = Sales AI (internal groups), Account 2 = Deal Monitor (customer groups)
+
+---
+
+## Known Bugs Fixed
+
+| File | Bug | Fix |
+|------|-----|-----|
+| `rag/indexer.js` | 600ms delay was assumed to be inside `embed()`, causing quota exhaustion | Moved delay into `indexFile()` loop explicitly |
+| `rag/indexer.js` | Crash when imported as module | Guard `process.argv[1]?.endsWith()` |
+| `rag/retriever.js` | Similarity score leaked into LLM context | Removed score from context string |
+| `zalo/listener.js` | `query` variable shadowed DB import | Renamed to `userQuery` |
+| `zalo/responder.js` | Thinking message + source citation in reply | Removed both |
+| `deal/analyzer.js` | Prompt injection via user messages | Wrapped conversation in XML tags |
+| `deal/analyzer.js` | Double `groupId__` prefix in deal_key | LLM returns name only; code prepends groupId |
+| `summary/engine.js` | `const { rows } = await query()` — rows was undefined | Fixed destructuring |
+| `lib/auth.ts` | Base64 token was reversible | Replaced with HMAC-SHA256 |
+| `lib/queries/analytics.ts` | topQuestions had no time filter | Added `WHERE created_at >= NOW() - INTERVAL '7 days'` |
+| `app/overview/page.tsx` | Chart key timezone mismatch (UTC vs VN) | `sv-SE` locale + `timeZone: 'Asia/Ho_Chi_Minh'` |
+| all pages | Vercel prerender crash at build time | `export const dynamic = 'force-dynamic'` |
