@@ -104,8 +104,12 @@ src/
 3. `indexAll()` — index Google Drive docs (background, skipped if `SKIP_INDEX=true`)
 4. `GroupListener` + `MentionResponder` — Zalo WebSocket
 5. `startSummaryEngine()` + `startAutoSync()` — cron jobs
-6. HTTP health server on `PORT` (default 3000) — keeps Render Free alive
-7. Cookie refresh cron 3:00 AM (local machine with Chrome only)
+6. `startDailyAlert(api)` — 8AM Mon–Sat morning alert to `admin_group_id`
+7. HTTP health server on `PORT` (default 3000) — keeps Render Free alive
+8. Cookie refresh cron 3:00 AM (local machine with Chrome only)
+
+**Backend modules added**
+- `alert/daily.js` — morning alert cron (8:00 AM Mon–Sat, Asia/Ho_Chi_Minh); sends open issues + inactive groups + AI stats to admin group
 
 **Key module notes**
 - `session.js` — reads `ZALO_COOKIE` from ENV first, DB fallback; health-checks every 30min via `getOwnId()`, calls `onExpired` → `process.exit(1)`
@@ -131,6 +135,7 @@ app/
 ├── analytics/
 ├── deals/
 ├── groups/
+│   └── [groupId]/        # Group detail page (dynamic route)
 ├── knowledge-base/
 ├── logs/
 ├── overview/
@@ -138,7 +143,7 @@ app/
 components/
 ├── ui/                   # Reusable UI primitives (StatsCard, WeekChart)
 ├── Sidebar.tsx
-├── AnalyticsPage.tsx
+├── AnalyticsPage.tsx     # Analytics + quality score + unanswered callout
 ├── DealsPage.tsx
 ├── GZMemberManager.tsx
 ├── GroupTypeManager.tsx
@@ -152,7 +157,8 @@ lib/
     ├── overview.ts
     ├── logs.ts
     ├── deals.ts
-    └── analytics.ts
+    ├── analytics.ts
+    └── group-detail.ts   # getGroupDetail(), getInactiveGroups()
 types/
 └── index.ts
 ```
@@ -162,6 +168,8 @@ types/
 - All date/time display must include `timeZone: 'Asia/Ho_Chi_Minh'` (Vercel runs UTC)
 - DB queries belong in `lib/queries/` — never inline SQL in page components
 - Pool `max: 2` (Supabase free tier: 15 connections total; backend uses max 5)
+- Dynamic route params: `params: Promise<{ groupId: string }>` (Next.js 14+ App Router — must `await params`)
+- `proxy.ts` is the middleware file (NOT `middleware.ts`) — Edge runtime uses Web Crypto API (`crypto.subtle`), not Node `crypto`
 
 ### Database Schema (Supabase / pgvector)
 
@@ -275,10 +283,55 @@ LOG_LEVEL            # debug / info / warn / error (default: info)
 - **Supabase Session Pooler**: Use `postgres.[PROJECT_REF]` as username; Transaction Pooler breaks pgvector HNSW
 - **`giftzone-agent-admin` is a regular directory**: Vercel does not clone git submodules — already converted
 
+### Admin / Dashboard (additions)
+- **`proxy.ts` is the middleware** (NOT `middleware.ts`): This Next.js version (16.x) uses `proxy.ts`. Having both files causes build error "Both middleware.ts and proxy.ts detected" — delete `middleware.ts`, put all auth logic in `proxy.ts`
+- **Web Crypto in `proxy.ts`**: Edge runtime has no Node `crypto` — use `crypto.subtle.importKey` / `crypto.subtle.sign` for HMAC-SHA256 to match `lib/auth.ts`
+- **`window.location.href` for post-login redirect**: `router.push` silently fails if Vercel SSR crashes during navigation; hard redirect is reliable
+- **`KNOWN_KEYS` pattern in settings**: UI always shows known config keys with defaults — decouples settings page from backend restart/seeding order
+- **`INSERT ... ON CONFLICT DO UPDATE` for config PUT**: Plain `UPDATE` no-ops if row doesn't exist yet (backend not restarted to seed); upsert always works
+
 ### Infrastructure
 - **Render Free Web Service** (not Background Worker): Background Worker lost free tier in 2024; use Web Service + cron-job.org ping every 14min to prevent sleep
 - **GitHub SSH remote**: HTTPS returns 403 due to account mismatch (Thuy-Cam vs ThuyCam2911)
 - **2 Render accounts**: Account 1 = Sales AI (internal groups), Account 2 = Deal Monitor (customer groups)
+
+---
+
+## Project Status (as of 2026-06-18)
+
+### ✅ Completed features
+
+| Feature | Location | Notes |
+|---------|----------|-------|
+| RAG agent (Zalo @mention → Gemini answer) | `backend/src/rag/` | Stable, deployed on Render |
+| Deal analyzer (issue detection cron) | `backend/src/deal/analyzer.js` | OpenRouter free tier, 15min cron |
+| Daily summary (18:00 Mon–Fri) | `backend/src/summary/engine.js` | Sends to each active group |
+| **Daily morning alert (8AM)** | `backend/src/alert/daily.js` | ⚠️ Needs backend restart on Render to activate |
+| Admin dashboard login + auth | `admin/app/login/`, `proxy.ts` | HMAC-SHA256, hard redirect after login |
+| Overview page | `admin/app/overview/` | KPI cards + 7-day chart |
+| Logs page | `admin/app/logs/` | AI query log with latency |
+| Deals page | `admin/app/deals/` | Deal stage + open issues per group |
+| Analytics page | `admin/app/analytics/` | Top questions, doc usage, quality score, unanswered callout |
+| **Group detail page** | `admin/app/groups/[groupId]/` | KPI cards, open issues, top senders, AI log |
+| **Inactive group detection** | `admin/app/groups/` | Amber banner for groups silent >3 days |
+| Settings page (all known keys) | `admin/app/settings/` | `KNOWN_KEYS` pattern — shows all keys even before backend seeds DB |
+| GZ Members manager | `admin/components/GZMemberManager.tsx` | Fixed save bug (error feedback + `res.ok` check) |
+| Group type manager | `admin/components/GroupTypeManager.tsx` | internal / customer classification |
+
+### ⏳ Pending (user action required)
+
+| Action | Where | Why |
+|--------|-------|-----|
+| Restart backend on Render | Render dashboard → Manual Deploy | Activate `alert/daily.js` + seed `admin_group_id` in DB |
+| Set `admin_group_id` in Settings | `giftzone-ai.vercel.app/settings` | Paste Zalo group ID to receive 8AM alerts |
+| Verify Vercel root dir = `giftzone-agent-admin` | Vercel → Settings → General | After monorepo rename |
+
+### 🔲 Not yet implemented
+
+- Deal stage tracker (Idea #1 — skipped by choice)
+- Push notification / webhook to external systems
+- Multi-language support
+- User management (multiple manager accounts)
 
 ---
 
@@ -298,3 +351,9 @@ LOG_LEVEL            # debug / info / warn / error (default: info)
 | `lib/queries/analytics.ts` | topQuestions had no time filter | Added `WHERE created_at >= NOW() - INTERVAL '7 days'` |
 | `app/overview/page.tsx` | Chart key timezone mismatch (UTC vs VN) | `sv-SE` locale + `timeZone: 'Asia/Ho_Chi_Minh'` |
 | all pages | Vercel prerender crash at build time | `export const dynamic = 'force-dynamic'` |
+| `components/GZMemberManager.tsx` | Save silently failed, selections lost after reload | Added `res.ok` check, error state, try/catch |
+| `app/api/gz-members/route.ts` | `gz_members` table missing on fresh Supabase | Added `ensureTable()` with `CREATE TABLE IF NOT EXISTS` before every query |
+| `app/login/page.tsx` | Login succeeded but no redirect to inner pages | Changed `router.push` → `window.location.href` (hard redirect) |
+| `proxy.ts` | Token mismatch with `lib/auth.ts` (btoa vs HMAC) | Replaced btoa with Web Crypto `crypto.subtle` HMAC-SHA256 |
+| `app/settings/page.tsx` | `admin_group_id` not visible before backend restart | Added `KNOWN_KEYS` merge pattern — shows all known keys regardless of DB state |
+| `app/api/config/route.ts` | PUT silently no-ops for unseeded keys | Changed `UPDATE` → `INSERT ... ON CONFLICT DO UPDATE` |
