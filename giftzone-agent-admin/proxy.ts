@@ -2,18 +2,20 @@ import { NextRequest, NextResponse } from 'next/server';
 
 const PUBLIC_PATHS = ['/login', '/api/auth'];
 
-// Dùng btoa (available trong Edge runtime) thay vì Node crypto
-function makeToken(password: string, secret: string): string {
-  return btoa(`${password}:${secret}`);
-}
-
-function validToken(token: string): boolean {
+// Edge runtime: dùng Web Crypto API (không có Node crypto)
+async function makeToken(password: string): Promise<string> {
   const secret = process.env.SESSION_SECRET ?? 'secret';
-  const expected = makeToken(process.env.DASHBOARD_PASSWORD ?? '', secret);
-  return token === expected;
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    'raw', enc.encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false, ['sign'],
+  );
+  const sig = await crypto.subtle.sign('HMAC', key, enc.encode(password));
+  return Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
-export default function proxy(req: NextRequest) {
+export default async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
   if (PUBLIC_PATHS.some(p => pathname.startsWith(p))) {
@@ -21,7 +23,12 @@ export default function proxy(req: NextRequest) {
   }
 
   const token = req.cookies.get('gz_session')?.value;
-  if (!token || !validToken(token)) {
+  if (!token) {
+    return NextResponse.redirect(new URL('/login', req.url));
+  }
+
+  const expected = await makeToken(process.env.DASHBOARD_PASSWORD ?? '');
+  if (token !== expected) {
     return NextResponse.redirect(new URL('/login', req.url));
   }
 
