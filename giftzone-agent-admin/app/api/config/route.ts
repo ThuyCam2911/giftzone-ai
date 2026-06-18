@@ -14,7 +14,9 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json({ error: 'key và value là bắt buộc' }, { status: 400 });
   }
   await query(
-    `UPDATE settings SET value = $1, updated_at = NOW() WHERE key = $2`,
+    `INSERT INTO settings (key, value, description, updated_at)
+     VALUES ($2, $1, '', NOW())
+     ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = NOW()`,
     [String(value), key]
   );
   return NextResponse.json({ ok: true });
