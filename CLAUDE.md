@@ -322,9 +322,7 @@ LOG_LEVEL            # debug / info / warn / error (default: info)
 
 | Action | Where | Why |
 |--------|-------|-----|
-| Restart backend on Render | Render dashboard → Manual Deploy | Activate `alert/daily.js` + seed `admin_group_id` in DB |
-| Set `admin_group_id` in Settings | `giftzone-ai.vercel.app/settings` | Paste Zalo group ID to receive 8AM alerts |
-| Verify Vercel root dir = `giftzone-agent-admin` | Vercel → Settings → General | After monorepo rename |
+| Wait for next Render deploy | Auto on push to main | `alert/daily.js` activates on next restart — code already deployed |
 
 ### 🔲 Not yet implemented
 
