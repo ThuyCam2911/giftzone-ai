@@ -167,5 +167,14 @@ export async function initSchema() {
     ALTER TABLE group_names ADD COLUMN IF NOT EXISTS group_type TEXT NOT NULL DEFAULT 'customer'
   `);
 
+  // Bảng thành viên team GiftZone — dùng để phân biệt [GZ] vs [KH] khi analyze issues
+  await query(`
+    CREATE TABLE IF NOT EXISTS gz_members (
+      sender_uid  TEXT PRIMARY KEY,
+      sender_name TEXT NOT NULL,
+      added_at    TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+
   log.info('Schema sẵn sàng ✓');
 }

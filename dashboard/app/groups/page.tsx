@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import Sidebar from '@/components/Sidebar';
 import GroupTypeManager from '@/components/GroupTypeManager';
+import GZMemberManager from '@/components/GZMemberManager';
 import { query } from '@/lib/db';
 
 interface GroupRow {
@@ -11,10 +12,34 @@ interface GroupRow {
   updated_at: string;
 }
 
+interface MemberRow {
+  sender_uid: string;
+  sender_name: string;
+}
+
+interface CandidateRow extends MemberRow {
+  msg_count: number;
+}
+
 export default async function GroupsPage() {
-  const groups = await query<GroupRow>(
-    `SELECT group_id, name, group_type, updated_at FROM group_names ORDER BY name`
-  );
+  const [groups, savedMembers, candidates] = await Promise.all([
+    query<GroupRow>(
+      `SELECT group_id, name, group_type, updated_at FROM group_names ORDER BY name`,
+    ),
+    query<MemberRow>(
+      `SELECT sender_uid, sender_name FROM gz_members ORDER BY sender_name`,
+    ),
+    query<CandidateRow>(
+      `SELECT m.sender_uid, MAX(m.sender_name) AS sender_name, COUNT(*)::int AS msg_count
+       FROM messages m
+       LEFT JOIN group_names gn ON gn.group_id = m.group_id
+       WHERE COALESCE(gn.group_type, 'customer') != 'internal'
+         AND m.sender_uid IS NOT NULL AND m.sender_name IS NOT NULL
+       GROUP BY m.sender_uid
+       ORDER BY msg_count DESC
+       LIMIT 50`,
+    ),
+  ]);
 
   return (
     <div className="flex min-h-screen bg-gray-50">
@@ -23,11 +48,22 @@ export default async function GroupsPage() {
         <div className="sticky top-0 z-10 bg-gray-50/90 backdrop-blur border-b border-gray-200 px-4 pt-18 pb-3 md:pt-4 md:px-8 md:pb-4">
           <h1 className="text-lg font-bold text-gray-900">Quản lý nhóm</h1>
           <p className="text-xs text-gray-500 mt-0.5">
-            Phân loại nhóm Zalo — nhóm nội bộ sẽ bị bỏ qua khi phân tích chất lượng hội thoại.
+            Phân loại nhóm Zalo và cấu hình team GiftZone.
           </p>
         </div>
-        <div className="px-4 pb-8 md:px-8 pt-6 max-w-2xl">
-          <GroupTypeManager groups={groups} />
+        <div className="px-4 pb-8 md:px-8 pt-6 max-w-2xl space-y-8">
+          <section>
+            <h2 className="text-sm font-semibold text-gray-700 mb-3">Phân loại nhóm</h2>
+            <GroupTypeManager groups={groups} />
+          </section>
+
+          <section>
+            <h2 className="text-sm font-semibold text-gray-700 mb-1">Thành viên team GiftZone</h2>
+            <p className="text-xs text-gray-400 mb-3">
+              Giúp AI phân biệt khách đang hỏi GZ hay đang trao đổi nội bộ — tránh cảnh báo sai.
+            </p>
+            <GZMemberManager saved={savedMembers} candidates={candidates} />
+          </section>
         </div>
       </main>
     </div>

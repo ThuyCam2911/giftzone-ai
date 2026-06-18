@@ -59,7 +59,7 @@ async function fetchNewMessages(groupId) {
   );
   const since = lastRun.rows[0]?.last ?? new Date(Date.now() - 24 * 60 * 60 * 1000);
   const result = await query(
-    `SELECT sender_name, content, msg_ts
+    `SELECT sender_uid, sender_name, content, msg_ts
      FROM messages
      WHERE group_id = $1 AND msg_ts > $2
      ORDER BY msg_ts ASC`,
@@ -91,14 +91,35 @@ async function detectIssues(groupId, messages) {
   if (messages.length < 5) return [];
 
   const now = new Date().toISOString();
+
+  // Load GZ member UIDs — nếu bảng rỗng thì không tag role (behavior giống cũ)
+  const gzRows = await query(`SELECT sender_uid FROM gz_members`);
+  const gzUids = new Set(gzRows.rows.map(r => r.sender_uid));
+  const hasGzConfig = gzUids.size > 0;
+
   const conversation = messages
-    .map(m => `[${new Date(m.msg_ts).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })}] ${m.sender_name}: ${m.content}`)
+    .map(m => {
+      const ts = new Date(m.msg_ts).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' });
+      const role = hasGzConfig ? (gzUids.has(m.sender_uid) ? '[GZ]' : '[KH]') : '';
+      return `${role}[${ts}] ${m.sender_name}: ${m.content}`;
+    })
     .join('\n');
+
+  const roleRules = hasGzConfig ? `
+Phân loại người tham gia:
+- [GZ] = nhân viên GiftZone (CS/Sales) — người cần được đánh giá chất lượng
+- [KH] = khách hàng
+
+Quy tắc bổ sung:
+- Chỉ report no_reply hoặc dropped_conversation khi [KH] nhắn và [GZ] chưa có reply
+- Nếu các tin nhắn cuối đều là [KH] nói chuyện với nhau (không có câu hỏi hướng đến [GZ]) → KHÔNG flag no_reply hay dropped_conversation
+- slow_reply, rude_behavior, broken_promise chỉ áp dụng cho [GZ]
+` : '';
 
   const prompt = `Bạn là AI giám sát chất lượng đội ngũ sales (theo mô hình WeCom). Phân tích hội thoại dưới đây và phát hiện CÁC VẤN ĐỀ đang xảy ra.
 
 Timestamp hiện tại: ${now}
-
+${roleRules}
 Issue types được phép dùng:
 - no_reply: khách đã hỏi nhưng sales chưa reply (dựa vào thứ tự tin nhắn cuối)
 - slow_reply: khoảng cách reply của sales > 24 giờ (tính từ timestamp)
