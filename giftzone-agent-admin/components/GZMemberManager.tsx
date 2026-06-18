@@ -23,6 +23,7 @@ export default function GZMemberManager({ saved: initialSaved, candidates }: Pro
   const [selected, setSelected] = useState<Set<string>>(savedUids);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   function toggle(uid: string) {
     setSelected(prev => {
@@ -31,6 +32,7 @@ export default function GZMemberManager({ saved: initialSaved, candidates }: Pro
       return next;
     });
     setSaved(false);
+    setError(null);
   }
 
   async function save() {
@@ -43,13 +45,23 @@ export default function GZMemberManager({ saved: initialSaved, candidates }: Pro
     const fromSaved = initialSaved.filter(m => !candidateUids.has(m.sender_uid));
     const members = [...fromCandidates, ...fromSaved];
 
-    await fetch('/api/gz-members', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ members }),
-    });
+    try {
+      const res = await fetch('/api/gz-members', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ members }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setError(body.error ?? `Lỗi ${res.status}`);
+      } else {
+        setError(null);
+        setSaved(true);
+      }
+    } catch {
+      setError('Không thể kết nối server');
+    }
     setSaving(false);
-    setSaved(true);
   }
 
   if (candidates.length === 0) {
@@ -113,6 +125,9 @@ export default function GZMemberManager({ saved: initialSaved, candidates }: Pro
         </ul>
       </div>
 
+      {error && (
+        <p className="text-xs text-red-500 text-right">{error}</p>
+      )}
       <div className="flex justify-end">
         <button
           onClick={save}
