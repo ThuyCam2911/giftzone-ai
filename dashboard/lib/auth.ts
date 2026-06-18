@@ -1,10 +1,11 @@
 import { cookies } from 'next/headers';
+import { createHmac } from 'crypto';
 
 export const COOKIE_NAME = 'gz_session';
 
 function makeToken(password: string): string {
   const secret = process.env.SESSION_SECRET ?? 'secret';
-  return Buffer.from(`${password}:${secret}`).toString('base64');
+  return createHmac('sha256', secret).update(password).digest('hex');
 }
 
 export function verifyPassword(password: string): boolean {

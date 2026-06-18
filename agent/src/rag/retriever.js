@@ -53,7 +53,7 @@ export async function answer(userQuery) {
 
   // 3. Build context từ chunks
   const context = chunks
-    .map((c, i) => `[${i + 1}] Từ "${c.file_name}" (độ liên quan: ${(c.similarity * 100).toFixed(0)}%):\n${c.content}`)
+    .map((c, i) => `[${i + 1}] Từ "${c.file_name}":\n${c.content}`)
     .join('\n\n---\n\n');
 
   // 4. Gọi Gemini

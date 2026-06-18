@@ -127,7 +127,9 @@ Trả về JSON array (không có markdown, chỉ JSON thuần):
 Nếu không có vấn đề, trả về [].
 
 Cuộc trò chuyện (group ${groupId}):
-${conversation.slice(0, 6000)}`;
+<conversation>
+${conversation.slice(0, 6000)}
+</conversation>`;
 
   const text = await callWithFallback(prompt);
 

@@ -10,6 +10,7 @@ import { createLogger } from '../utils/logger.js';
 const log = createLogger('Session');
 
 function parseCookie(raw) {
+  if (!raw) return raw;
   try {
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed)) {

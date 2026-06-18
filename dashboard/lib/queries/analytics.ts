@@ -15,7 +15,8 @@ export async function getAnalyticsData(): Promise<AnalyticsData> {
   const [topQuestions, groupUsage, docUsage, latencyRows, chartRows, unanswered] = await Promise.all([
     query<{ question: string; cnt: string }>(
       `SELECT query AS question, COUNT(*) AS cnt
-       FROM ai_logs GROUP BY query ORDER BY cnt DESC LIMIT 10`,
+       FROM ai_logs WHERE created_at >= NOW() - INTERVAL '7 days'
+       GROUP BY query ORDER BY cnt DESC LIMIT 10`,
     ),
     query<{ group_id: string; group_name: string | null; cnt: string; avg_ms: string }>(
       `SELECT l.group_id, gn.name AS group_name, COUNT(*) AS cnt, AVG(l.latency_ms)::int AS avg_ms
@@ -47,6 +48,7 @@ export async function getAnalyticsData(): Promise<AnalyticsData> {
     query<{ question: string; cnt: string }>(
       `SELECT query AS question, COUNT(*) AS cnt
        FROM ai_logs WHERE answer ILIKE '%chưa có thông tin%'
+         AND created_at >= NOW() - INTERVAL '7 days'
        GROUP BY query ORDER BY cnt DESC LIMIT 10`,
     ),
   ]);
