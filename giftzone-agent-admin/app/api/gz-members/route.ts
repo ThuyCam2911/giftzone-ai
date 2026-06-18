@@ -2,8 +2,20 @@ import { NextResponse } from 'next/server';
 import { isAuthenticated } from '@/lib/auth';
 import { query } from '@/lib/db';
 
+async function ensureTable() {
+  await query(`
+    CREATE TABLE IF NOT EXISTS gz_members (
+      sender_uid  TEXT PRIMARY KEY,
+      sender_name TEXT NOT NULL,
+      added_at    TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+}
+
 export async function GET() {
   if (!await isAuthenticated()) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  await ensureTable();
 
   const [saved, candidates] = await Promise.all([
     query<{ sender_uid: string; sender_name: string }>(
@@ -41,6 +53,7 @@ export async function POST(req: Request) {
 
   const valid = members.filter(m => m.sender_uid && m.sender_name);
 
+  await ensureTable();
   await query(`DELETE FROM gz_members`);
 
   if (valid.length > 0) {
@@ -55,5 +68,5 @@ export async function POST(req: Request) {
     );
   }
 
-  return NextResponse.json({ ok: true, count: members.length });
+  return NextResponse.json({ ok: true, count: valid.length });
 }
