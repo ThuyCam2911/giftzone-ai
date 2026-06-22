@@ -40,7 +40,7 @@ export class MentionResponder {
 
     } catch (err) {
       log.error('RAG pipeline lỗi', err.message);
-      await this._send(groupId, '❌ Có lỗi xảy ra khi xử lý câu hỏi. Vui lòng thử lại sau.');
+      await this._send(groupId, '❌ Có lỗi xảy ra khi xử lý câu hỏi. Vui lòng thử lại sau.', isDirect);
     }
   }
 
