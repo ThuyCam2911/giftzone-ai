@@ -292,12 +292,15 @@ LOG_LEVEL            # debug / info / warn / error (default: info)
 
 ### Infrastructure
 - **Render Free Web Service** (not Background Worker): Background Worker lost free tier in 2024; use Web Service + cron-job.org ping every 14min to prevent sleep
+- **Health endpoint must return tiny response**: cron-job.org fails with "output too large" if response is big → service sleeps. Return plain `ok` text, not JSON
+- **`INSTANCE_ID` env var for multi-account**: set `INSTANCE_ID=dealmonitor` on deal-monitor service → uses DB key `zalo_cookie_dealmonitor` instead of shared `zalo_cookie` — prevents account 1 cookie overwriting account 2
 - **GitHub SSH remote**: HTTPS returns 403 due to account mismatch (Thuy-Cam vs ThuyCam2911)
 - **2 Render accounts**: Account 1 = Sales AI (internal groups), Account 2 = Deal Monitor (customer groups)
+- **Render root directory must match folder name**: after monorepo rename, update Root Directory in Render Settings for each service or deploy fails with `cd: No such file or directory`
 
 ---
 
-## Project Status (as of 2026-06-18)
+## Project Status (as of 2026-06-24)
 
 ### ✅ Completed features
 
@@ -306,14 +309,14 @@ LOG_LEVEL            # debug / info / warn / error (default: info)
 | RAG agent (Zalo @mention → Gemini answer) | `backend/src/rag/` | Stable, deployed on Render |
 | Deal analyzer (issue detection cron) | `backend/src/deal/analyzer.js` | OpenRouter free tier, 15min cron |
 | Daily summary (18:00 Mon–Fri) | `backend/src/summary/engine.js` | Sends to each active group |
-| **Daily morning alert (8AM)** | `backend/src/alert/daily.js` | ⚠️ Needs backend restart on Render to activate |
+| Daily morning alert (8AM) | `backend/src/alert/daily.js` | Active after last deploy |
 | Admin dashboard login + auth | `admin/app/login/`, `proxy.ts` | HMAC-SHA256, hard redirect after login |
 | Overview page | `admin/app/overview/` | KPI cards + 7-day chart |
 | Logs page | `admin/app/logs/` | AI query log with latency |
 | Deals page | `admin/app/deals/` | Deal stage + open issues per group |
 | Analytics page | `admin/app/analytics/` | Top questions, doc usage, quality score, unanswered callout |
-| **Group detail page** | `admin/app/groups/[groupId]/` | KPI cards, open issues, top senders, AI log |
-| **Inactive group detection** | `admin/app/groups/` | Amber banner for groups silent >3 days |
+| Group detail page | `admin/app/groups/[groupId]/` | KPI cards, open issues, top senders, AI log |
+| Inactive group detection | `admin/app/groups/` | Amber banner for groups silent >3 days |
 | Settings page (all known keys) | `admin/app/settings/` | `KNOWN_KEYS` pattern — shows all keys even before backend seeds DB |
 | GZ Members manager | `admin/components/GZMemberManager.tsx` | Fixed save bug (error feedback + `res.ok` check) |
 | Group type manager | `admin/components/GroupTypeManager.tsx` | internal / customer classification |
@@ -322,7 +325,7 @@ LOG_LEVEL            # debug / info / warn / error (default: info)
 
 | Action | Where | Why |
 |--------|-------|-----|
-| Wait for next Render deploy | Auto on push to main | `alert/daily.js` activates on next restart — code already deployed |
+| Re-extract cookie account 2 | Zalo web → J2TEAM extension | Account deal-monitor có thể bị ban hoặc cookie thiếu `zpw_enk` |
 
 ### 🔲 Not yet implemented
 
@@ -355,3 +358,5 @@ LOG_LEVEL            # debug / info / warn / error (default: info)
 | `proxy.ts` | Token mismatch with `lib/auth.ts` (btoa vs HMAC) | Replaced btoa with Web Crypto `crypto.subtle` HMAC-SHA256 |
 | `app/settings/page.tsx` | `admin_group_id` not visible before backend restart | Added `KNOWN_KEYS` merge pattern — shows all known keys regardless of DB state |
 | `app/api/config/route.ts` | PUT silently no-ops for unseeded keys | Changed `UPDATE` → `INSERT ... ON CONFLICT DO UPDATE` |
+| `zalo/responder.js` | Error handler calls `_send()` without `isDirect` → sends GroupMessage to 1:1 UID → "Nhóm này không tồn tại" | Pass `isDirect` to `_send()` in catch block |
+| `src/index.js` | Health endpoint returned JSON → cron-job.org "output too large" → stopped pinging → Render sleep | Changed to `res.end('ok')` plain text |
