@@ -109,8 +109,8 @@ async function main() {
   // HTTP health endpoint — giữ Render Free tier không bị sleep
   const PORT = process.env.PORT || 3000;
   createServer((req, res) => {
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ status: 'ok', agent: getConfig('agent_name') }));
+    res.writeHead(200, { 'Content-Type': 'text/plain' });
+    res.end('ok');
   }).listen(PORT, () => log.info(`Health endpoint: http://localhost:${PORT}`));
 
   // Graceful shutdown
