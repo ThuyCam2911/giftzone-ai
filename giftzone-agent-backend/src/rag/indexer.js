@@ -175,7 +175,7 @@ export async function startAutoSync() {
 
   // Lấy pageToken ban đầu
   let pageToken = (await drive.changes.getStartPageToken()).data.startPageToken;
-  log.info('Auto-sync started — polling mỗi 15 phút');
+  log.info('Auto-sync started — polling mỗi 24 giờ');
 
   setInterval(async () => {
     try {
@@ -201,7 +201,7 @@ export async function startAutoSync() {
     } catch (err) {
       log.error('Auto-sync poll lỗi', err.message);
     }
-  }, 15 * 60 * 1000);
+  }, 24 * 60 * 60 * 1000);
 }
 
 // ─── Chạy trực tiếp: node src/rag/indexer.js ─────────────────────────────────
