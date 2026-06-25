@@ -11,11 +11,11 @@ import { createLogger } from '../utils/logger.js';
 
 const log = createLogger('IssueAI');
 
-// Fallback chain — thử lần lượt khi model trước bị 429
+// Fallback chain — thử lần lượt khi model trước bị 429/404
 const MODEL_CHAIN = [
-  'nvidia/nemotron-3-super-120b-a12b:free',
   'meta-llama/llama-3.3-70b-instruct:free',
-  'mistralai/mistral-7b-instruct:free',
+  'deepseek/deepseek-r1-0528:free',
+  'google/gemma-3-27b-it:free',
 ];
 
 function getClient() {
@@ -41,8 +41,8 @@ async function callWithFallback(prompt) {
       log.debug(`Model used: ${model}`);
       return response.choices[0]?.message?.content ?? '[]';
     } catch (err) {
-      if (err.status === 429) {
-        log.warn(`Model ${model} bị rate limit (429) — thử model tiếp theo...`);
+      if (err.status === 429 || err.status === 404) {
+        log.warn(`Model ${model} không khả dụng (${err.status}) — thử model tiếp theo...`);
         continue;
       }
       throw err;
