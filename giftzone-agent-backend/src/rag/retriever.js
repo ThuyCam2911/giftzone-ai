@@ -48,8 +48,12 @@ export async function answer(userQuery) {
       answer: '⚠️ Tôi chưa được cấp tài liệu nào để tra cứu. Vui lòng liên hệ Manager để cập nhật tài liệu.',
       sources: [],
       latency_ms: Date.now() - start,
+      is_answered: false,
+      top_score: 0,
     };
   }
+
+  const topScore = chunks[0]?.similarity ?? 0;
 
   // 3. Build context từ chunks
   const context = chunks
@@ -71,8 +75,9 @@ Câu hỏi của Sales: ${userQuery}`;
   const answerText = result.response.text() ?? 'Có lỗi xảy ra, vui lòng thử lại.';
   const sources = [...new Set(chunks.map(c => c.file_name))];
   const latency_ms = Date.now() - start;
+  const is_answered = topScore >= 0.5 && !answerText.includes('chưa có thông tin') && !answerText.includes('chưa được cấp tài liệu');
 
-  log.info(`Trả lời trong ${latency_ms}ms, ${sources.length} nguồn: ${sources.join(', ')}`);
+  log.info(`Trả lời trong ${latency_ms}ms, score=${topScore.toFixed(2)}, ${sources.length} nguồn: ${sources.join(', ')}`);
 
-  return { answer: answerText, sources, latency_ms };
+  return { answer: answerText, sources, latency_ms, is_answered, top_score: topScore };
 }

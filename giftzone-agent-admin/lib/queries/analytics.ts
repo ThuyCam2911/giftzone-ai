@@ -2,6 +2,15 @@ import { query } from '@/lib/db';
 import { toVNDateString } from '@/lib/utils';
 import type { QuestionRow, GroupUsageRow, DocUsageRow, LatencyStats, DayCount } from '@/types';
 
+export interface ResponseTimeRow {
+  sender_uid: string;
+  sender_name: string;
+  role: string;
+  msg_count: number;
+  group_count: number;
+  avg_response_min: number | null;
+}
+
 export interface AnalyticsData {
   topQuestions: QuestionRow[];
   groupUsage: GroupUsageRow[];
@@ -10,10 +19,11 @@ export interface AnalyticsData {
   days7: DayCount[];
   unanswered: QuestionRow[];
   unansweredTotal: number;
+  responseTimes: ResponseTimeRow[];
 }
 
 export async function getAnalyticsData(): Promise<AnalyticsData> {
-  const [topQuestions, groupUsage, docUsage, latencyRows, chartRows, unanswered, unansweredCount] = await Promise.all([
+  const [topQuestions, groupUsage, docUsage, latencyRows, chartRows, unanswered, unansweredCount, responseTimeRows] = await Promise.all([
     query<{ question: string; cnt: string }>(
       `SELECT query AS question, COUNT(*) AS cnt
        FROM ai_logs WHERE created_at >= NOW() - INTERVAL '7 days'
@@ -48,14 +58,44 @@ export async function getAnalyticsData(): Promise<AnalyticsData> {
     ),
     query<{ question: string; cnt: string }>(
       `SELECT query AS question, COUNT(*) AS cnt
-       FROM ai_logs WHERE answer ILIKE '%chưa có thông tin%'
+       FROM ai_logs
+       WHERE (is_answered = false OR answer ILIKE '%chưa có thông tin%')
          AND created_at >= NOW() - INTERVAL '7 days'
        GROUP BY query ORDER BY cnt DESC LIMIT 10`,
     ),
     query<{ count: string }>(
       `SELECT COUNT(*) AS count FROM ai_logs
-       WHERE answer ILIKE '%chưa có thông tin%'
+       WHERE (is_answered = false OR answer ILIKE '%chưa có thông tin%')
          AND created_at >= NOW() - INTERVAL '7 days'`,
+    ),
+    // Response time per GZ member — chỉ có data sau khi is_gz_member được set
+    query<{ sender_uid: string; sender_name: string; role: string; msg_count: string; group_count: string; avg_response_min: string | null }>(
+      `SELECT
+         gz.sender_uid,
+         gz.sender_name,
+         gz.role,
+         COUNT(m.id)::int AS msg_count,
+         COUNT(DISTINCT m.group_id)::int AS group_count,
+         AVG(
+           CASE WHEN prev_kh.msg_ts IS NOT NULL
+             THEN EXTRACT(EPOCH FROM (m.msg_ts - prev_kh.msg_ts)) / 60
+             ELSE NULL
+           END
+         )::int AS avg_response_min
+       FROM gz_members gz
+       LEFT JOIN messages m ON m.sender_uid = gz.sender_uid
+         AND m.is_gz_member = true
+         AND m.msg_ts >= NOW() - INTERVAL '30 days'
+       LEFT JOIN LATERAL (
+         SELECT MAX(msg2.msg_ts) AS msg_ts
+         FROM messages msg2
+         WHERE msg2.group_id = m.group_id
+           AND msg2.msg_ts < m.msg_ts
+           AND msg2.is_gz_member = false
+           AND msg2.msg_type = 'text'
+       ) prev_kh ON true
+       GROUP BY gz.sender_uid, gz.sender_name, gz.role
+       ORDER BY msg_count DESC`,
     ),
   ]);
 
@@ -89,5 +129,13 @@ export async function getAnalyticsData(): Promise<AnalyticsData> {
     latency,
     days7,
     unanswered:   unanswered.map(r => ({ question: r.question, cnt: Number(r.cnt) })),
+    responseTimes: responseTimeRows.map(r => ({
+      sender_uid:       r.sender_uid,
+      sender_name:      r.sender_name,
+      role:             r.role,
+      msg_count:        Number(r.msg_count),
+      group_count:      Number(r.group_count),
+      avg_response_min: r.avg_response_min !== null ? Number(r.avg_response_min) : null,
+    })),
   };
 }

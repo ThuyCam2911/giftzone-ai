@@ -176,6 +176,12 @@ export async function initSchema() {
       added_at    TIMESTAMPTZ DEFAULT NOW()
     )
   `);
+  // Migrations — thêm column mới nếu chưa tồn tại
+  await query(`ALTER TABLE gz_members  ADD COLUMN IF NOT EXISTS role        TEXT      NOT NULL DEFAULT 'sales'`);
+  await query(`ALTER TABLE ai_logs     ADD COLUMN IF NOT EXISTS is_answered BOOLEAN   DEFAULT true`);
+  await query(`ALTER TABLE ai_logs     ADD COLUMN IF NOT EXISTS top_score   FLOAT`);
+  await query(`ALTER TABLE messages    ADD COLUMN IF NOT EXISTS is_gz_member BOOLEAN  DEFAULT false`);
+  await query(`ALTER TABLE messages    ADD COLUMN IF NOT EXISTS msg_type    TEXT      DEFAULT 'text'`);
 
   log.info('Schema sẵn sàng ✓');
 }

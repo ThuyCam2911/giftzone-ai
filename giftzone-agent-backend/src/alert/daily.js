@@ -17,7 +17,7 @@ async function buildAlertMessage() {
     day: '2-digit', month: '2-digit', year: 'numeric',
   });
 
-  const [criticalIssues, inactiveGroups, aiStats] = await Promise.all([
+  const [criticalIssues, inactiveGroups, aiStats, knowledgeGaps] = await Promise.all([
     // Issues critical/high đang open
     query(
       `SELECT s.issue_type, s.severity, s.title, gn.name AS group_name
@@ -41,9 +41,17 @@ async function buildAlertMessage() {
     // Thống kê AI hôm qua
     query(
       `SELECT COUNT(*) AS total,
-              SUM(CASE WHEN answer ILIKE '%chưa có thông tin%' THEN 1 ELSE 0 END) AS unanswered
+              SUM(CASE WHEN is_answered = false OR answer ILIKE '%chưa có thông tin%' THEN 1 ELSE 0 END) AS unanswered
        FROM ai_logs
        WHERE created_at >= NOW() - INTERVAL '1 day'`,
+    ),
+    // Top 3 câu hỏi AI chưa trả lời được trong 7 ngày (knowledge gap)
+    query(
+      `SELECT query, COUNT(*) AS cnt
+       FROM ai_logs
+       WHERE (is_answered = false OR answer ILIKE '%chưa có thông tin%')
+         AND created_at >= NOW() - INTERVAL '7 days'
+       GROUP BY query ORDER BY cnt DESC LIMIT 3`,
     ),
   ]);
 
@@ -79,19 +87,28 @@ async function buildAlertMessage() {
     }
   }
 
+  // Knowledge gap — câu hỏi Sales hay hỏi mà AI chưa trả lời được
+  if (knowledgeGaps.rows.length > 0) {
+    lines.push(`\n📚 *Knowledge gap 7 ngày qua (${knowledgeGaps.rows.length} câu):*`);
+    for (const r of knowledgeGaps.rows) {
+      const q = r.query.length > 60 ? r.query.slice(0, 57) + '…' : r.query;
+      lines.push(`• "${q}" (${r.cnt}x)`);
+    }
+    lines.push(`→ Cập nhật tài liệu Google Drive để cải thiện.`);
+  }
+
   lines.push(`\n🔗 Dashboard: giftzone-ai.vercel.app`);
   return lines.join('\n');
 }
 
 export function startDailyAlert(api) {
-  const adminGroupId = getConfig('admin_group_id') || process.env.ZALO_TEST_GROUP_ID;
-
-  if (!adminGroupId) {
-    log.warn('Daily Alert tắt — chưa cấu hình admin_group_id (settings) hoặc ZALO_TEST_GROUP_ID');
-    return;
-  }
-
   cron.schedule('0 8 * * 1-6', async () => {
+    // Đọc config tại runtime — admin_group_id có thể được set sau startup qua Dashboard
+    const adminGroupId = getConfig('admin_group_id') || process.env.ZALO_TEST_GROUP_ID;
+    if (!adminGroupId) {
+      log.warn('Daily Alert bỏ qua — chưa cấu hình admin_group_id');
+      return;
+    }
     log.info('Gửi daily alert...');
     try {
       const msg = await buildAlertMessage();
@@ -102,5 +119,5 @@ export function startDailyAlert(api) {
     }
   }, { timezone: 'Asia/Ho_Chi_Minh' });
 
-  log.info(`Daily Alert started — gửi 8:00 AM T2-T7 vào group ${adminGroupId}`);
+  log.info('Daily Alert started — gửi 8:00 AM T2-T7');
 }

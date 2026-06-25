@@ -48,6 +48,11 @@ async function callWithFallback(prompt) {
       throw err;
     }
   }
+  // Ghi trạng thái degraded vào settings để dashboard hiển thị
+  try {
+    await query(`INSERT INTO settings (key, value, description) VALUES ('analyzer_status','degraded','Trạng thái deal analyzer')
+      ON CONFLICT (key) DO UPDATE SET value='degraded', updated_at=NOW()`);
+  } catch { /* không crash nếu ghi settings lỗi */ }
   throw new Error('Tất cả models trong fallback chain đều bị rate limit');
 }
 
@@ -92,28 +97,37 @@ async function detectIssues(groupId, messages) {
 
   const now = new Date().toISOString();
 
-  // Load GZ member UIDs — nếu bảng rỗng thì không tag role (behavior giống cũ)
-  const gzRows = await query(`SELECT sender_uid FROM gz_members`);
-  const gzUids = new Set(gzRows.rows.map(r => r.sender_uid));
-  const hasGzConfig = gzUids.size > 0;
+  // Load GZ members với role — nếu bảng rỗng thì không tag role (behavior giống cũ)
+  const gzRows = await query(`SELECT sender_uid, role FROM gz_members`);
+  const gzMap = new Map(gzRows.rows.map(r => [r.sender_uid, r.role ?? 'sales']));
+  const hasGzConfig = gzMap.size > 0;
+
+  const ROLE_LABEL = { sales: 'GZ-Sales', cs: 'GZ-CS', manager: 'GZ-Manager', technical: 'GZ-Tech' };
 
   const conversation = messages
     .map(m => {
       const ts = new Date(m.msg_ts).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' });
-      const role = hasGzConfig ? (gzUids.has(m.sender_uid) ? '[GZ]' : '[KH]') : '';
-      return `${role}[${ts}] ${m.sender_name}: ${m.content}`;
+      let tag = '';
+      if (hasGzConfig) {
+        const role = gzMap.get(m.sender_uid);
+        tag = role ? `[${ROLE_LABEL[role] ?? 'GZ'}]` : '[KH]';
+      }
+      return `${tag}[${ts}] ${m.sender_name}: ${m.content}`;
     })
     .join('\n');
 
   const roleRules = hasGzConfig ? `
 Phân loại người tham gia:
-- [GZ] = nhân viên GiftZone (CS/Sales) — người cần được đánh giá chất lượng
+- [GZ-Sales] = nhân viên Sales GiftZone
+- [GZ-CS] = nhân viên Customer Success GiftZone
+- [GZ-Manager] = quản lý GiftZone
+- [GZ-Tech] = nhân viên kỹ thuật GiftZone
 - [KH] = khách hàng
 
 Quy tắc bổ sung:
-- Chỉ report no_reply hoặc dropped_conversation khi [KH] nhắn và [GZ] chưa có reply
-- Nếu các tin nhắn cuối đều là [KH] nói chuyện với nhau (không có câu hỏi hướng đến [GZ]) → KHÔNG flag no_reply hay dropped_conversation
-- slow_reply, rude_behavior, broken_promise chỉ áp dụng cho [GZ]
+- Chỉ report no_reply hoặc dropped_conversation khi [KH] nhắn và GZ chưa có reply
+- Nếu các tin nhắn cuối đều là [KH] nói chuyện với nhau (không có câu hỏi hướng đến GZ) → KHÔNG flag no_reply hay dropped_conversation
+- slow_reply, rude_behavior, broken_promise chỉ áp dụng cho nhân viên GZ
 ` : '';
 
   const prompt = `Bạn là AI giám sát chất lượng đội ngũ sales (theo mô hình WeCom). Phân tích hội thoại dưới đây và phát hiện CÁC VẤN ĐỀ đang xảy ra.
@@ -224,7 +238,10 @@ async function runAnalysis() {
         await upsertIssue(groupId, issue);
       }
       const detectedTypes = issues.map(i => i.issue_type);
-      await autoResolve(groupId, detectedTypes);
+      // Chỉ auto-resolve khi có đủ messages để phân tích (tránh resolve nhầm vì thiếu data)
+      if (messages.length >= 5) {
+        await autoResolve(groupId, detectedTypes);
+      }
       log.info(`Group ${groupId}: ${issues.length} issues detected`);
     } catch (err) {
       log.error(`Lỗi phân tích group ${groupId}:`, err.message);

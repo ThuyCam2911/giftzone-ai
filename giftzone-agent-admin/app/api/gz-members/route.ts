@@ -10,6 +10,7 @@ async function ensureTable() {
       added_at    TIMESTAMPTZ DEFAULT NOW()
     )
   `);
+  await query(`ALTER TABLE gz_members ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'sales'`);
 }
 
 export async function GET() {
@@ -18,8 +19,8 @@ export async function GET() {
   await ensureTable();
 
   const [saved, candidates] = await Promise.all([
-    query<{ sender_uid: string; sender_name: string }>(
-      `SELECT sender_uid, sender_name FROM gz_members ORDER BY sender_name`,
+    query<{ sender_uid: string; sender_name: string; role: string }>(
+      `SELECT sender_uid, sender_name, role FROM gz_members ORDER BY sender_name`,
     ),
     query<{ sender_uid: string; sender_name: string; msg_count: number }>(
       `SELECT m.sender_uid, MAX(m.sender_name) AS sender_name, COUNT(*) AS msg_count
@@ -39,7 +40,7 @@ export async function GET() {
 export async function POST(req: Request) {
   if (!await isAuthenticated()) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  let body: { members?: { sender_uid: string; sender_name: string }[] };
+  let body: { members?: { sender_uid: string; sender_name: string; role?: string }[] };
   try {
     body = await req.json();
   } catch {
@@ -58,12 +59,12 @@ export async function POST(req: Request) {
 
   if (valid.length > 0) {
     const values = valid
-      .map((_, i) => `($${i * 2 + 1}, $${i * 2 + 2})`)
+      .map((_, i) => `($${i * 3 + 1}, $${i * 3 + 2}, $${i * 3 + 3})`)
       .join(', ');
-    const params = valid.flatMap(m => [m.sender_uid, m.sender_name]);
+    const params = valid.flatMap(m => [m.sender_uid, m.sender_name, m.role ?? 'sales']);
     await query(
-      `INSERT INTO gz_members (sender_uid, sender_name) VALUES ${values}
-       ON CONFLICT (sender_uid) DO UPDATE SET sender_name = EXCLUDED.sender_name`,
+      `INSERT INTO gz_members (sender_uid, sender_name, role) VALUES ${values}
+       ON CONFLICT (sender_uid) DO UPDATE SET sender_name = EXCLUDED.sender_name, role = EXCLUDED.role`,
       params,
     );
   }

@@ -4,7 +4,7 @@ import React, { useState, useTransition } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
   AlertTriangle, Siren, CheckCircle2, BarChart2, Star,
-  ChevronUp, ChevronDown, ChevronsUpDown, type LucideIcon,
+  ChevronUp, ChevronDown, ChevronsUpDown, Check, type LucideIcon,
 } from 'lucide-react';
 import type { SalesIssue, GroupQualityRow, DealsStats } from '@/types';
 
@@ -46,13 +46,27 @@ const GROUP_PAGE_SIZE = 10;
 
 type SortKey = 'msg_count' | 'quality_score' | 'open_issues' | 'ai_queries';
 
-export default function DealsPage({ stats, issues, groups, aiInsight, dateFrom, dateTo, issueLabels }: Props) {
+export default function DealsPage({ stats, issues: initialIssues, groups, aiInsight, dateFrom, dateTo, issueLabels }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [, startTransition] = useTransition();
   const [from, setFrom] = useState(dateFrom);
   const [to, setTo] = useState(dateTo);
   const [expanded, setExpanded] = useState<number | null>(null);
+  const [issues, setIssues] = useState(initialIssues);
+  const [resolvingId, setResolvingId] = useState<number | null>(null);
+
+  async function resolveIssue(id: number) {
+    setResolvingId(id);
+    try {
+      const res = await fetch(`/api/issues/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'resolved' }) });
+      if (res.ok) {
+        setIssues(prev => prev.map(i => i.id === id ? { ...i, status: 'resolved', resolved_at: new Date().toISOString() } : i));
+      }
+    } finally {
+      setResolvingId(null);
+    }
+  }
   const [groupPage, setGroupPage] = useState(1);
   const [sortKey, setSortKey] = useState<SortKey>('msg_count');
   const [sortAsc, setSortAsc] = useState(false);
@@ -305,6 +319,7 @@ export default function DealsPage({ stats, issues, groups, aiInsight, dateFrom, 
                       <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">MÔ TẢ</th>
                       <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">TRẠNG THÁI</th>
                       <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">PHÁT HIỆN</th>
+                      <th className="px-4 py-3"></th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
@@ -342,10 +357,24 @@ export default function DealsPage({ stats, issues, groups, aiInsight, dateFrom, 
                             <td className="px-4 py-3 text-xs text-gray-400 whitespace-nowrap">
                               {new Date(issue.detected_at).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', dateStyle: 'short', timeStyle: 'short' })}
                             </td>
+                            <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                              {issue.status === 'open' && (
+                                <button
+                                  onClick={() => resolveIssue(issue.id)}
+                                  disabled={resolvingId === issue.id}
+                                  title="Đánh dấu đã giải quyết"
+                                  className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-colors disabled:opacity-40"
+                                  style={{ background: '#e6f9f1', color: '#018a4e' }}
+                                >
+                                  <Check size={11} />
+                                  {resolvingId === issue.id ? '...' : 'Resolve'}
+                                </button>
+                              )}
+                            </td>
                           </tr>
                           {isExpanded && (
                             <tr key={`${issue.id}-detail`} className="bg-gray-50">
-                              <td colSpan={6} className="px-4 py-3">
+                              <td colSpan={7} className="px-4 py-3">
                                 {issue.description && (
                                   <p className="text-xs text-gray-600 mb-1">
                                     <span className="font-medium">Giải thích:</span> {issue.description}

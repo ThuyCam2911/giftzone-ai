@@ -5,8 +5,17 @@ import Link from 'next/link';
 import { WeekChart } from '@/components/ui';
 import {
   MessageSquare, Zap, TrendingUp, FileText, Flame, HelpCircle,
-  AlertCircle, type LucideIcon,
+  AlertCircle, Clock, type LucideIcon,
 } from 'lucide-react';
+
+interface ResponseTimeRow {
+  sender_uid: string;
+  sender_name: string;
+  role: string;
+  msg_count: number;
+  group_count: number;
+  avg_response_min: number | null;
+}
 
 interface Props {
   topQuestions: { question: string; cnt: number }[];
@@ -16,6 +25,7 @@ interface Props {
   days7: { label: string; count: number }[];
   unanswered: { question: string; cnt: number }[];
   unansweredTotal: number;
+  responseTimes: ResponseTimeRow[];
 }
 
 function sanitizeQuery(q: string) {
@@ -23,8 +33,23 @@ function sanitizeQuery(q: string) {
   return q.length > 100 ? q.slice(0, 100) + '…' : q;
 }
 
+const ROLE_LABEL: Record<string, string> = { sales: 'Sales', cs: 'CS', manager: 'Manager', technical: 'Tech' };
+const ROLE_COLOR: Record<string, { bg: string; color: string }> = {
+  sales:     { bg: '#e6f9f1', color: '#018a4e' },
+  cs:        { bg: '#eef2ff', color: '#4338ca' },
+  manager:   { bg: '#fff3eb', color: '#c2410c' },
+  technical: { bg: '#f0fdf4', color: '#166534' },
+};
+
+function formatResponseTime(min: number | null) {
+  if (min === null) return '—';
+  if (min < 1) return '< 1 phút';
+  if (min < 60) return `${min} phút`;
+  return `${Math.round(min / 60)} giờ`;
+}
+
 export default function AnalyticsPage({
-  topQuestions, groupUsage, docUsage, latency, days7, unanswered, unansweredTotal,
+  topQuestions, groupUsage, docUsage, latency, days7, unanswered, unansweredTotal, responseTimes,
 }: Props) {
   const [tab, setTab] = useState<'top' | 'unanswered'>('top');
 
@@ -131,6 +156,58 @@ export default function AnalyticsPage({
           </>
         )}
       </div>
+
+      {/* ── Response time per member ── */}
+      {responseTimes.length > 0 && (
+        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden mb-6">
+          <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-2">
+            <Clock size={13} className="text-gray-400" />
+            <span className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Thời gian phản hồi theo nhân viên (30 ngày)</span>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm min-w-[500px]">
+              <thead className="bg-gray-50 border-b border-gray-100">
+                <tr>
+                  <th className="text-left px-4 py-2.5 text-xs font-medium text-gray-400 uppercase">Nhân viên</th>
+                  <th className="text-left px-4 py-2.5 text-xs font-medium text-gray-400 uppercase">Role</th>
+                  <th className="text-right px-4 py-2.5 text-xs font-medium text-gray-400 uppercase">Tin nhắn</th>
+                  <th className="text-right px-4 py-2.5 text-xs font-medium text-gray-400 uppercase">Nhóm</th>
+                  <th className="text-right px-4 py-2.5 text-xs font-medium text-gray-400 uppercase">TB phản hồi</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {responseTimes.map(r => {
+                  const roleStyle = ROLE_COLOR[r.role] ?? ROLE_COLOR.sales;
+                  const isSlowReply = r.avg_response_min !== null && r.avg_response_min > 120;
+                  return (
+                    <tr key={r.sender_uid} className="hover:bg-gray-50">
+                      <td className="px-4 py-2.5 text-xs font-medium text-gray-800">{r.sender_name}</td>
+                      <td className="px-4 py-2.5">
+                        <span className="text-[10px] font-medium px-2 py-0.5 rounded-full"
+                          style={roleStyle}>
+                          {ROLE_LABEL[r.role] ?? r.role}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2.5 text-xs text-gray-600 text-right">{r.msg_count.toLocaleString()}</td>
+                      <td className="px-4 py-2.5 text-xs text-gray-600 text-right">{r.group_count}</td>
+                      <td className="px-4 py-2.5 text-right">
+                        <span className={`text-xs font-semibold ${isSlowReply ? 'text-red-500' : 'text-gray-700'}`}>
+                          {formatResponseTime(r.avg_response_min)}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          {responseTimes.every(r => r.avg_response_min === null) && (
+            <p className="text-xs text-gray-400 text-center py-3 border-t border-gray-50">
+              Dữ liệu thời gian phản hồi sẽ tích lũy sau vài ngày agent hoạt động.
+            </p>
+          )}
+        </div>
+      )}
 
       {/* ── Bottom 2 columns ── */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

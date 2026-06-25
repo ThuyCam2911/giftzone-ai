@@ -19,6 +19,7 @@ interface GroupRow {
 interface MemberRow {
   sender_uid: string;
   sender_name: string;
+  role?: string;
 }
 
 interface CandidateRow extends MemberRow {
@@ -31,7 +32,7 @@ export default async function GroupsPage() {
       `SELECT group_id, name, group_type, updated_at FROM group_names ORDER BY name`,
     ),
     query<MemberRow>(
-      `SELECT sender_uid, sender_name FROM gz_members ORDER BY sender_name`,
+      `SELECT sender_uid, sender_name, role FROM gz_members ORDER BY sender_name`,
     ),
     query<CandidateRow>(
       `SELECT m.sender_uid, MAX(m.sender_name) AS sender_name, COUNT(*)::int AS msg_count

@@ -16,6 +16,18 @@ export class GroupListener {
     this.ownId  = ownId;
     this.onMention = null; // async (ctx) => void  — set từ ngoài
     this._knownGroups = new Set(); // tránh gọi getGroupInfo lặp lại
+    this._gzMembers = new Set();
+    this._gzMembersLoadedAt = 0;
+  }
+
+  async _loadGzMembers() {
+    const now = Date.now();
+    if (now - this._gzMembersLoadedAt < 5 * 60 * 1000) return;
+    this._gzMembersLoadedAt = now; // cập nhật trước để tránh stampede khi DB lỗi
+    try {
+      const result = await query(`SELECT sender_uid FROM gz_members`);
+      this._gzMembers = new Set(result.rows.map(r => r.sender_uid));
+    } catch { /* bảng chưa tồn tại lúc startup thì bỏ qua */ }
   }
 
   start() {
@@ -62,8 +74,11 @@ export class GroupListener {
       const userId = senderUid;
       log.info(`[1:1] ${senderName} (${userId}): "${content.slice(0, 80)}"`);
 
+      await this._loadGzMembers();
+      const isGz = this._gzMembers.has(senderUid);
+      const msgType = this._detectMsgType(data, content);
       // Ghi vào DB để Deal Intelligence phân tích (dùng userId làm group_id)
-      await this._logMessage(userId, senderUid, senderName, content, ts);
+      await this._logMessage(userId, senderUid, senderName, content, ts, isGz, msgType);
 
       if (typeof this.onMention === 'function' && content.trim().length >= 2) {
         await this.onMention({
@@ -87,8 +102,11 @@ export class GroupListener {
 
     log.debug(`[${groupId}] ${senderName}: ${content.slice(0, 60)}`);
 
+    await this._loadGzMembers();
+    const isGz = this._gzMembers.has(senderUid);
+    const msgType = this._detectMsgType(data, content);
     // Lưu vào DB để summary
-    await this._logMessage(groupId, senderUid, senderName, content, ts);
+    await this._logMessage(groupId, senderUid, senderName, content, ts, isGz, msgType);
 
     // Lazy-fetch tên nhóm nếu chưa biết
     this._cacheGroupName(groupId);
@@ -146,12 +164,18 @@ export class GroupListener {
       .catch(err => log.warn(`Không lấy được tên nhóm ${groupId}:`, err.message));
   }
 
-  async _logMessage(groupId, senderUid, senderName, content, ts) {
+  _detectMsgType(data, content) {
+    if (typeof data.content !== 'string') return 'media';
+    if (content.startsWith('{') || content.startsWith('[')) return 'media';
+    return 'text';
+  }
+
+  async _logMessage(groupId, senderUid, senderName, content, ts, isGzMember = false, msgType = 'text') {
     try {
       await query(
-        `INSERT INTO messages (group_id, sender_uid, sender_name, content, msg_ts)
-         VALUES ($1, $2, $3, $4, $5)`,
-        [groupId, senderUid, senderName, content, ts]
+        `INSERT INTO messages (group_id, sender_uid, sender_name, content, msg_ts, is_gz_member, msg_type)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [groupId, senderUid, senderName, content, ts, isGzMember, msgType]
       );
       log.debug(`Logged message from ${senderName} in ${groupId}`);
     } catch (err) {

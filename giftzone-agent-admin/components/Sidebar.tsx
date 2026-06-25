@@ -34,6 +34,7 @@ const navGroups = [
   {
     label: 'Quản lý',
     items: [
+      { href: '/sales-members',  label: 'Nhân viên',      icon: Users },
       { href: '/knowledge-base', label: 'Knowledge Base', icon: BookOpen },
       { href: '/groups',         label: 'Nhóm Zalo',      icon: Users },
       { href: '/settings',       label: 'Cài đặt',        icon: Settings },

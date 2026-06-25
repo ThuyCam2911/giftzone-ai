@@ -36,6 +36,8 @@ export class MentionResponder {
         answer: result.answer,
         sources: result.sources,
         latency_ms: result.latency_ms,
+        is_answered: result.is_answered,
+        top_score: result.top_score,
       });
 
     } catch (err) {
@@ -53,12 +55,12 @@ export class MentionResponder {
     }
   }
 
-  async _logInteraction({ groupId, senderUid, query: q, answer: a, sources, latency_ms }) {
+  async _logInteraction({ groupId, senderUid, query: q, answer: a, sources, latency_ms, is_answered = true, top_score = null }) {
     try {
       await query(
-        `INSERT INTO ai_logs (group_id, sender_uid, query, answer, sources, latency_ms)
-         VALUES ($1, $2, $3, $4, $5, $6)`,
-        [groupId, senderUid, q, a, JSON.stringify(sources), latency_ms]
+        `INSERT INTO ai_logs (group_id, sender_uid, query, answer, sources, latency_ms, is_answered, top_score)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [groupId, senderUid, q, a, JSON.stringify(sources), latency_ms, is_answered, top_score]
       );
     } catch (err) {
       log.error('Log DB lỗi', err.message);
