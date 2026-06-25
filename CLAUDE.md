@@ -116,8 +116,8 @@ src/
 - `listener.js` — handles `DirectMessage` (1:1, no @mention needed) and `GroupMessage` (@mention required); emits `onMention(ctx)` with `isDirect` flag
 - `responder.js` — uses `MessageType.DirectMessage` when `ctx.isDirect=true`, `GroupMessage` otherwise; calls `answer()` directly, no thinking message, no source citation
 - `embedder.js` — `outputDimensionality: 1536` (HNSW limit is 2000; default 3072 exceeds it); exponential backoff on 429
-- `indexer.js` — 600ms delay between chunks (critical for free-tier rate limit); polls Drive Changes API every 15min
-- `analyzer.js` — model fallback chain; XML tags around conversation to prevent prompt injection; 60s delay between groups; `[GZ]`/`[KH]` role tagging from `gz_members` table (no-op if table empty)
+- `indexer.js` — 600ms delay between chunks (critical for free-tier rate limit); polls Drive Changes API every **24h** (reduced from 15min to preserve embedding quota)
+- `analyzer.js` — model fallback chain; XML tags around conversation to prevent prompt injection; 60s delay between groups; role-based tagging `[GZ-Sales]`/`[GZ-CS]`/`[GZ-Manager]`/`[GZ-Tech]`/`[KH]` (no-op if table empty); writes `analyzer_status=degraded` to settings when entire chain fails
 - `cookie-extractor.js` — safety: requires `zpsid`/`zpw_sek` and ≥3 cookies before writing DB; does NOT run at startup
 
 ### Admin (`giftzone-agent-admin/`)
@@ -129,6 +129,7 @@ app/
 │   ├── config/
 │   ├── groups/
 │   ├── gz-members/
+│   ├── issues/[id]/      # PATCH — manual resolve/reopen issue
 │   ├── knowledge/
 │   ├── logs/
 │   └── overview/
@@ -139,13 +140,14 @@ app/
 ├── knowledge-base/
 ├── logs/
 ├── overview/
+├── sales-members/        # Per-person KPI: msgs, groups, issues, response time
 └── settings/
 components/
 ├── ui/                   # Reusable UI primitives (StatsCard, WeekChart)
 ├── Sidebar.tsx
-├── AnalyticsPage.tsx     # Analytics + quality score + unanswered callout
-├── DealsPage.tsx
-├── GZMemberManager.tsx
+├── AnalyticsPage.tsx     # Analytics + quality score + unanswered + response time per member
+├── DealsPage.tsx         # + manual resolve button per issue
+├── GZMemberManager.tsx   # + role dropdown (Sales/CS/Manager/Tech)
 ├── GroupTypeManager.tsx
 ├── SettingsForm.tsx
 └── SessionAlert.tsx
@@ -158,7 +160,8 @@ lib/
     ├── logs.ts
     ├── deals.ts
     ├── analytics.ts
-    └── group-detail.ts   # getGroupDetail(), getInactiveGroups()
+    ├── group-detail.ts   # getGroupDetail(), getInactiveGroups()
+    └── sales-members.ts  # getSalesMembersData() — per-member KPI with LATERAL join
 types/
 └── index.ts
 ```
@@ -176,16 +179,23 @@ types/
 | Table | Purpose |
 |-------|---------|
 | `doc_chunks` | RAG chunks — `embedding vector(1536)`, HNSW `m=16, ef_construction=64` |
-| `ai_logs` | AI query/answer log — `sources JSONB`, `latency_ms` |
-| `messages` | All Zalo messages (group + 1:1) |
+| `ai_logs` | AI query/answer log — `sources JSONB`, `latency_ms`, `is_answered BOOL`, `top_score FLOAT` |
+| `messages` | All Zalo messages — `is_gz_member BOOL`, `msg_type TEXT` (text/media) |
 | `settings` | DB-backed config (source of truth over `.env` for most keys) |
 | `group_names` | Zalo group metadata + `group_type` (internal/customer) |
-| `gz_members` | GiftZone team UIDs — used by analyzer to tag `[GZ]` vs `[KH]` |
+| `gz_members` | GiftZone team UIDs + `role` (sales/cs/manager/technical) |
 | `deals` | Deal tracking per customer per group |
 | `deal_events` | Deal stage change history |
 | `sales_issues` | Quality issues detected by analyzer (open/resolved) |
 
 All timestamps: `TIMESTAMPTZ`. Group/User IDs: `TEXT` (Zalo IDs are large numbers, string is safer).
+
+**New columns added (2026-06-25) via `ADD COLUMN IF NOT EXISTS` migrations in `initSchema()`:**
+- `gz_members.role` — phân role nhân viên; analyzer dùng để tag `[GZ-Sales]`/`[GZ-CS]` etc.
+- `ai_logs.is_answered` — `false` khi top similarity < 0.5 hoặc answer chứa "chưa có thông tin"
+- `ai_logs.top_score` — similarity score của chunk match tốt nhất (0–1)
+- `messages.is_gz_member` — cached khi insert, tránh JOIN mỗi lần analytics
+- `messages.msg_type` — `'text'` hoặc `'media'`; analyzer skip non-text khi detect issues
 
 ### AI Stack (all free-tier)
 
@@ -272,8 +282,10 @@ LOG_LEVEL            # debug / info / warn / error (default: info)
 - **OpenRouter fallback chain**: Free models get rate-limited; code tries models in sequence
 - **60s delay between groups**: OpenRouter free tier ~3-6 req/min
 - **`deal_key` format**: LLM returns `customer_name_no_accents`, code prepends `${groupId}__` — do NOT include group_id in prompt (causes double prefix)
-- **`gz_members` role tagging**: Empty table = no tags = behavior identical to before (safe default)
+- **`gz_members` role tagging**: Empty table = no tags = behavior identical to before (safe default). With roles: `[GZ-Sales]`, `[GZ-CS]`, `[GZ-Manager]`, `[GZ-Tech]` + `[KH]`
 - **Prompt injection guard**: Conversation wrapped in `<conversation>...</conversation>` XML tags
+- **auto-resolve guard**: only calls `autoResolve()` when `messages.length >= 5` — prevents resolving open issues when there's not enough data to re-analyze
+- **`analyzer_status` setting**: written to `settings` table with value `'degraded'` when entire MODEL_CHAIN fails; Dashboard can surface this warning
 
 ### Admin / Dashboard
 - **`force-dynamic`**: Required on all pages with DB queries — prevents Next.js build-time prerender crash
@@ -300,7 +312,7 @@ LOG_LEVEL            # debug / info / warn / error (default: info)
 
 ---
 
-## Project Status (as of 2026-06-24)
+## Project Status (as of 2026-06-25)
 
 ### ✅ Completed features
 
@@ -309,27 +321,36 @@ LOG_LEVEL            # debug / info / warn / error (default: info)
 | RAG agent (Zalo @mention → Gemini answer) | `backend/src/rag/` | Stable, deployed on Render |
 | Deal analyzer (issue detection cron) | `backend/src/deal/analyzer.js` | OpenRouter free tier, 15min cron |
 | Daily summary (18:00 Mon–Fri) | `backend/src/summary/engine.js` | Sends to each active group |
-| Daily morning alert (8AM) | `backend/src/alert/daily.js` | Active after last deploy |
+| Daily morning alert (8AM) + knowledge gap | `backend/src/alert/daily.js` | Runtime config fix + top 3 unanswered/7 days |
 | Admin dashboard login + auth | `admin/app/login/`, `proxy.ts` | HMAC-SHA256, hard redirect after login |
 | Overview page | `admin/app/overview/` | KPI cards + 7-day chart |
 | Logs page | `admin/app/logs/` | AI query log with latency |
-| Deals page | `admin/app/deals/` | Deal stage + open issues per group |
-| Analytics page | `admin/app/analytics/` | Top questions, doc usage, quality score, unanswered callout |
+| Deals page + manual resolve | `admin/app/deals/` | Open issues per group + Resolve button |
+| Analytics page + response time | `admin/app/analytics/` | Top questions, doc usage, quality score, unanswered, response time per member |
 | Group detail page | `admin/app/groups/[groupId]/` | KPI cards, open issues, top senders, AI log |
 | Inactive group detection | `admin/app/groups/` | Amber banner for groups silent >3 days |
 | Settings page (all known keys) | `admin/app/settings/` | `KNOWN_KEYS` pattern — shows all keys even before backend seeds DB |
-| GZ Members manager | `admin/components/GZMemberManager.tsx` | Fixed save bug (error feedback + `res.ok` check) |
+| GZ Members manager + role | `admin/components/GZMemberManager.tsx` | Role dropdown (Sales/CS/Manager/Tech) |
 | Group type manager | `admin/components/GroupTypeManager.tsx` | internal / customer classification |
+| Sales Members page | `admin/app/sales-members/` | KPI per person: msgs, groups, open issues, avg response time |
+| Role-based analyzer tagging | `backend/src/deal/analyzer.js` | `[GZ-Sales]`/`[GZ-CS]` etc. instead of generic `[GZ]` |
+| `is_answered` + `top_score` tracking | `backend/src/rag/retriever.js` | Accurate unanswered detection via similarity score |
+| `is_gz_member` + `msg_type` on messages | `backend/src/zalo/listener.js` | Enables response time analytics; filters non-text from analyzer |
+| Auto-sync interval 24h | `backend/src/rag/indexer.js` | Reduced from 15min to preserve Gemini embedding quota |
 
 ### ⏳ Pending (user action required)
 
 | Action | Where | Why |
 |--------|-------|-----|
 | Re-extract cookie account 2 | Zalo web → J2TEAM extension | Account deal-monitor có thể bị ban hoặc cookie thiếu `zpw_enk` |
+| Set `SKIP_INDEX=true` trên Render (nếu chưa) | Render ENV → giftzone-ai service | Ngăn re-index toàn bộ Drive mỗi lần deploy, tránh hết embedding quota |
+| Verify UptimeRobot đang ping đúng URL + interval ≤14min | UptimeRobot dashboard | Service vẫn có khả năng sleep nếu ping URL sai hoặc interval quá dài |
 
 ### 🔲 Not yet implemented
 
 - Deal stage tracker (Idea #1 — skipped by choice)
+- Critical issue → gửi Zalo alert ngay (không đợi 8AM daily alert)
+- `analyzer_status=degraded` warning hiển thị trên Overview dashboard (backend ghi vào settings nhưng admin chưa đọc)
 - Push notification / webhook to external systems
 - Multi-language support
 - User management (multiple manager accounts)
@@ -360,3 +381,7 @@ LOG_LEVEL            # debug / info / warn / error (default: info)
 | `app/api/config/route.ts` | PUT silently no-ops for unseeded keys | Changed `UPDATE` → `INSERT ... ON CONFLICT DO UPDATE` |
 | `zalo/responder.js` | Error handler calls `_send()` without `isDirect` → sends GroupMessage to 1:1 UID → "Nhóm này không tồn tại" | Pass `isDirect` to `_send()` in catch block |
 | `src/index.js` | Health endpoint returned JSON → cron-job.org "output too large" → stopped pinging → Render sleep | Changed to `res.end('ok')` plain text |
+| `alert/daily.js` | `admin_group_id` read at startup — if set after deploy via Dashboard, alert never sends | Moved `getConfig()` call inside cron callback (runtime read) |
+| `deal/analyzer.js` | `autoResolve()` called when < 5 messages → resolves open issues with no evidence | Guard: only call when `messages.length >= 5` |
+| `zalo/listener.js` | gz_members cache timestamp not set on DB error → stampede of failed queries under DB outage | Update `_gzMembersLoadedAt` before `await` to prevent retry flood |
+| `app/api/issues/[id]/route.ts` | SQL string interpolation for `resolved_at` (pattern risk) | Replaced with `CASE WHEN $1='resolved' THEN NOW() ELSE NULL END` |
