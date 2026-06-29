@@ -48,7 +48,7 @@ export default async function LogsPage({
                       <td className="px-4 py-3 text-xs">
                         {row.group_name
                           ? <span className="text-gray-800 font-medium">{row.group_name}</span>
-                          : <span className="text-gray-400 font-mono">···{row.group_id.slice(-8)}</span>}
+                          : <span className="text-gray-400 italic">1:1 chat</span>}
                       </td>
                       <td className="px-4 py-3 text-gray-900 max-w-xs truncate">{row.query}</td>
                       <td className="px-4 py-3 text-gray-500 text-xs">

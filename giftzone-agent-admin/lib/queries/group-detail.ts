@@ -67,12 +67,13 @@ export interface InactiveGroup {
 
 export async function getInactiveGroups(thresholdDays = 3): Promise<InactiveGroup[]> {
   const rows = await query<{ group_id: string; name: string | null; last_msg_at: string | null }>(
-    `SELECT m.group_id, gn.name,
+    `SELECT gn.group_id, gn.name,
             MAX(m.msg_ts) AS last_msg_at
      FROM messages m
-     LEFT JOIN group_names gn ON gn.group_id = m.group_id
-     WHERE COALESCE(gn.group_type, 'customer') != 'internal'
-     GROUP BY m.group_id, gn.name
+     INNER JOIN group_names gn ON gn.group_id = m.group_id
+     WHERE gn.group_type NOT IN ('internal', 'direct')
+       AND gn.name IS NOT NULL
+     GROUP BY gn.group_id, gn.name
      HAVING MAX(m.msg_ts) < NOW() - ($1 || ' days')::INTERVAL
      ORDER BY MAX(m.msg_ts) ASC`,
     [thresholdDays],

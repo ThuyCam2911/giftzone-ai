@@ -29,7 +29,7 @@ interface CandidateRow extends MemberRow {
 export default async function GroupsPage() {
   const [groups, savedMembers, candidates, inactiveGroups] = await Promise.all([
     query<GroupRow>(
-      `SELECT group_id, name, group_type, updated_at FROM group_names ORDER BY name`,
+      `SELECT group_id, name, group_type, updated_at FROM group_names WHERE COALESCE(group_type,'customer') != 'direct' ORDER BY name`,
     ),
     query<MemberRow>(
       `SELECT sender_uid, sender_name, role FROM gz_members ORDER BY sender_name`,
@@ -77,7 +77,7 @@ export default async function GroupsPage() {
                     className="flex items-center justify-between px-4 py-3 hover:bg-amber-50 transition-colors"
                   >
                     <span className="text-sm font-medium text-gray-800">
-                      {g.name ?? g.group_id}
+                      {g.name}
                     </span>
                     <span className="text-xs shrink-0 px-2 py-0.5 rounded-full font-medium"
                       style={g.days_silent >= 7

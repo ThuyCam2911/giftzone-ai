@@ -18,22 +18,23 @@ async function buildAlertMessage() {
   });
 
   const [criticalIssues, inactiveGroups, aiStats, knowledgeGaps] = await Promise.all([
-    // Issues critical/high đang open
+    // Issues critical/high/medium đang open
     query(
       `SELECT s.issue_type, s.severity, s.title, gn.name AS group_name
        FROM sales_issues s
        LEFT JOIN group_names gn ON gn.group_id = s.group_id
-       WHERE s.status = 'open' AND s.severity IN ('critical', 'high')
-       ORDER BY CASE s.severity WHEN 'critical' THEN 1 ELSE 2 END, s.detected_at DESC
-       LIMIT 5`,
+       WHERE s.status = 'open' AND s.severity IN ('critical', 'high', 'medium')
+       ORDER BY CASE s.severity WHEN 'critical' THEN 1 WHEN 'high' THEN 2 ELSE 3 END, s.detected_at DESC
+       LIMIT 8`,
     ),
-    // Nhóm im lặng > 3 ngày
+    // Nhóm im lặng > 3 ngày (chỉ nhóm có tên, bỏ DM 1:1 và nhóm nội bộ)
     query(
-      `SELECT m.group_id, gn.name, MAX(m.msg_ts) AS last_msg
+      `SELECT gn.name, MAX(m.msg_ts) AS last_msg
        FROM messages m
-       LEFT JOIN group_names gn ON gn.group_id = m.group_id
-       WHERE COALESCE(gn.group_type, 'customer') != 'internal'
-       GROUP BY m.group_id, gn.name
+       INNER JOIN group_names gn ON gn.group_id = m.group_id
+       WHERE gn.group_type NOT IN ('internal', 'direct')
+         AND gn.name IS NOT NULL
+       GROUP BY gn.name
        HAVING MAX(m.msg_ts) < NOW() - INTERVAL '3 days'
        ORDER BY MAX(m.msg_ts) ASC
        LIMIT 5`,
@@ -67,15 +68,15 @@ async function buildAlertMessage() {
     lines.push(`🤖 *AI hôm qua:* Chưa có câu hỏi nào`);
   }
 
-  // Critical issues
+  // Issues
   if (criticalIssues.rows.length > 0) {
-    lines.push(`\n⚠️ *Issues cần xử lý ngay (${criticalIssues.rows.length}):*`);
+    lines.push(`\n⚠️ *Issues đang mở (${criticalIssues.rows.length}):*`);
     for (const r of criticalIssues.rows) {
-      const sev = r.severity === 'critical' ? '🔴' : '🟠';
-      lines.push(`${sev} ${r.group_name ?? r.group_id}: ${r.title}`);
+      const sev = r.severity === 'critical' ? '🔴' : r.severity === 'high' ? '🟠' : '🟡';
+      lines.push(`${sev} ${r.group_name}: ${r.title}`);
     }
   } else {
-    lines.push(`\n✅ Không có issues critical/high đang mở`);
+    lines.push(`\n✅ Không có issues đang mở`);
   }
 
   // Inactive groups
@@ -83,7 +84,7 @@ async function buildAlertMessage() {
     lines.push(`\n💤 *Nhóm im lặng > 3 ngày (${inactiveGroups.rows.length}):*`);
     for (const r of inactiveGroups.rows) {
       const days = Math.floor((Date.now() - new Date(r.last_msg).getTime()) / 86400000);
-      lines.push(`• ${r.name ?? r.group_id}: ${days} ngày`);
+      lines.push(`• ${r.name}: ${days} ngày`);
     }
   }
 

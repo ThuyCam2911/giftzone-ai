@@ -72,11 +72,19 @@ export class GroupListener {
     // --- Chat 1:1 (DirectMessage) ---
     if (message.type === MessageType.DirectMessage) {
       const userId = senderUid;
-      log.info(`[1:1] ${senderName} (${userId}): "${content.slice(0, 80)}"`);
 
       await this._loadGzMembers();
       const isGz = this._gzMembers.has(senderUid);
       const msgType = this._detectMsgType(data, content);
+
+      // Bỏ qua system events (kết bạn, sticker hệ thống...) — không phải text thật
+      if (msgType === 'media' || content.trim().length < 2) return;
+
+      log.info(`[1:1] ${senderName} (${userId}): "${content.slice(0, 80)}"`);
+
+      // Cache tên người nhắn vào group_names để dashboard hiển thị được (type='direct')
+      this._cacheDirect1on1Name(userId, senderName);
+
       // Ghi vào DB để Deal Intelligence phân tích (dùng userId làm group_id)
       await this._logMessage(userId, senderUid, senderName, content, ts, isGz, msgType);
 
@@ -143,6 +151,19 @@ export class GroupListener {
       }
     }
     return q.trim();
+  }
+
+  // Cache tên 1:1 DM vào group_names (type='direct') để dashboard hiển thị tên thay vì UID
+  _cacheDirect1on1Name(userId, senderName) {
+    if (!senderName || this._knownGroups.has(`dm:${userId}`)) return;
+    this._knownGroups.add(`dm:${userId}`);
+    query(
+      `INSERT INTO group_names (group_id, name, group_type, updated_at)
+       VALUES ($1, $2, 'direct', NOW())
+       ON CONFLICT (group_id) DO UPDATE SET name = $2, updated_at = NOW()
+       WHERE group_names.group_type = 'direct'`,
+      [userId, senderName]
+    ).catch(err => log.warn(`Không cache tên 1:1 ${userId}:`, err.message));
   }
 
   // Fire-and-forget: gọi getGroupInfo 1 lần rồi cache vào DB

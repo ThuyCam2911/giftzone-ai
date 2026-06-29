@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import Sidebar from '@/components/Sidebar';
 import SettingsForm from '@/components/SettingsForm';
+import DriveFoldersManager from '@/components/DriveFoldersManager';
 import { query } from '@/lib/db';
 
 interface ConfigRow {
@@ -22,10 +23,30 @@ const KNOWN_KEYS: Omit<ConfigRow, 'updated_at'>[] = [
   { key: 'zalo_cookie',     value: '',               description: 'Zalo cookie JSON — paste từ chat.zalo.me' },
 ];
 
+interface DriveFolder {
+  id: number;
+  folder_id: string;
+  note: string;
+  created_at: string;
+}
+
+async function getDriveFolders(): Promise<DriveFolder[]> {
+  try {
+    await query(`CREATE TABLE IF NOT EXISTS drive_folders (
+      id SERIAL PRIMARY KEY, folder_id TEXT NOT NULL UNIQUE,
+      note TEXT NOT NULL DEFAULT '', created_at TIMESTAMPTZ DEFAULT NOW()
+    )`);
+    return await query<DriveFolder>(
+      `SELECT id, folder_id, note, created_at FROM drive_folders ORDER BY created_at ASC`
+    );
+  } catch { return []; }
+}
+
 export default async function SettingsPage() {
-  const rows = await query<ConfigRow>(
-    `SELECT key, value, description, updated_at FROM settings ORDER BY key`
-  );
+  const [rows, driveFolders] = await Promise.all([
+    query<ConfigRow>(`SELECT key, value, description, updated_at FROM settings ORDER BY key`),
+    getDriveFolders(),
+  ]);
 
   const rowMap = Object.fromEntries(rows.map(r => [r.key, r]));
 
@@ -44,8 +65,19 @@ export default async function SettingsPage() {
           <h1 className="text-lg font-bold text-gray-900">Cài đặt</h1>
           <p className="text-xs text-gray-500 mt-0.5">Cấu hình agent — thay đổi có hiệu lực sau khi restart agent.</p>
         </div>
-        <div className="px-4 pb-8 md:px-8 pt-6 max-w-2xl">
-          <SettingsForm rows={merged} />
+        <div className="px-4 pb-8 md:px-8 pt-6 max-w-2xl space-y-8">
+          <section>
+            <h2 className="text-sm font-semibold text-gray-700 mb-1">Google Drive Folders</h2>
+            <p className="text-xs text-gray-400 mb-3">
+              Danh sách folder/file ID Agent sẽ index — mỗi folder nên có ghi chú nội dung để dễ quản lý.
+            </p>
+            <DriveFoldersManager initial={driveFolders} />
+          </section>
+
+          <section>
+            <h2 className="text-sm font-semibold text-gray-700 mb-3">Cấu hình Agent</h2>
+            <SettingsForm rows={merged} />
+          </section>
         </div>
       </main>
     </div>
