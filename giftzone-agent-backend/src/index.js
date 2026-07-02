@@ -68,10 +68,17 @@ async function main() {
     }
 
     // 4. Khởi động listener + responder
+    // ENABLE_RAG=false (vd trên giftzone-deal-monitor): chỉ log tin nhắn cho
+    // analyzer, KHÔNG trả lời @mention bằng RAG docs — chỉ instance chính
+    // (giftzone-ai) mới đóng vai trò trợ lý trả lời Sales/khách
     log.info('Bước 4/5: Khởi động Zalo listener...');
-    const responder = new MentionResponder(api);
     const listener = new GroupListener(api, session.ownId);
-    listener.onMention = (ctx) => responder.handle(ctx);
+    if (process.env.ENABLE_RAG !== 'false') {
+      const responder = new MentionResponder(api);
+      listener.onMention = (ctx) => responder.handle(ctx);
+    } else {
+      log.info('ENABLE_RAG=false — chế độ monitor-only, không trả lời @mention');
+    }
     listener.start();
 
     // 5. Khởi động Summary Engine + Drive auto-sync
