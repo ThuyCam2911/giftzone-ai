@@ -7,8 +7,10 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid params' }, { status: 400 });
   }
   await query(
-    `UPDATE group_names SET group_type = $1, updated_at = NOW() WHERE group_id = $2`,
-    [group_type, group_id]
+    `INSERT INTO group_names (group_id, name, group_type, updated_at)
+     VALUES ($1, $1, $2, NOW())
+     ON CONFLICT (group_id) DO UPDATE SET group_type = $2, updated_at = NOW()`,
+    [group_id, group_type]
   );
   return NextResponse.json({ ok: true });
 }
