@@ -88,7 +88,7 @@ src/
 │   ├── indexer.js        # Google Drive → pgvector
 │   └── retriever.js      # Cosine search + Gemini chat
 ├── deal/
-│   └── analyzer.js       # Issue detection cron (15min, OpenRouter)
+│   └── analyzer.js       # Issue detection cron (15min, Gemini)
 ├── summary/
 │   └── engine.js         # Daily group summary cron (18:00 Mon–Fri)
 └── utils/
@@ -204,7 +204,7 @@ All timestamps: `TIMESTAMPTZ`. Group/User IDs: `TEXT` (Zalo IDs are large number
 | RAG chat | `gemini-2.5-flash-lite` | via `@google/generative-ai` |
 | Summary | `gemini-1.5-flash` | daily group summary |
 | Embeddings | `gemini-embedding-001` | `outputDimensionality: 1536` |
-| Issue detection | `meta-llama/llama-3.3-70b-instruct:free` | via OpenRouter, fallback chain |
+| Issue detection | `gemini-2.5-flash-lite` | dùng chung `GEMINI_API_KEY` (đổi từ OpenRouter — model free bị 404/429 liên tục) |
 
 Gemini embedding quota resets ~7:00 AM Vietnam time. If exhausted: set `SKIP_INDEX=true`, restart, run `npm run index:drive` after reset.
 
@@ -245,8 +245,7 @@ GOOGLE_CLIENT_ID
 GOOGLE_CLIENT_SECRET
 GOOGLE_REFRESH_TOKEN
 DRIVE_FOLDER_ID      # folder OR single file ID
-GEMINI_API_KEY
-OPENROUTER_API_KEY
+GEMINI_API_KEY       # dùng chung cho RAG, Ops Assistant, Summary, Embedding, Deal Analyzer
 PG_HOST
 PG_PORT=5433
 PG_DATABASE          # must set PG_DATABASE=postgres on Render (default is giftzone_agent for local Docker)
@@ -284,8 +283,8 @@ INSTANCE_ID           # đặt trên deal-monitor để tách cookie DB key riê
 - **`better-sqlite3` is `optionalDependencies`**: Native module needed only on local Mac with Chrome; must not crash on Render build
 
 ### Deal Analyzer
-- **OpenRouter fallback chain**: Free models get rate-limited; code tries models in sequence
-- **60s delay between groups**: OpenRouter free tier ~3-6 req/min
+- **Dùng Gemini (`GEMINI_API_KEY`), không còn OpenRouter**: OpenRouter's free MODEL_CHAIN (llama-3.3-70b, deepseek-r1, gemma-3-27b) rệu rã — 2/3 model bị gỡ khỏi OpenRouter (404), model còn lại rate-limit liên tục (429). Đổi sang `gemini-2.5-flash-lite` dùng chung key với RAG/Ops — có exponential backoff retry cho 429/503 (giống `embedder.js`)
+- **60s delay between groups**: tránh rate limit Gemini free tier
 - **`deal_key` format**: LLM returns `customer_name_no_accents`, code prepends `${groupId}__` — do NOT include group_id in prompt (causes double prefix)
 - **`gz_members` role tagging**: Empty table = no tags = behavior identical to before (safe default). With roles: `[GZ-Sales]`, `[GZ-CS]`, `[GZ-Manager]`, `[GZ-Tech]` + `[KH]`
 - **Prompt injection guard**: Conversation wrapped in `<conversation>...</conversation>` XML tags
@@ -324,7 +323,7 @@ INSTANCE_ID           # đặt trên deal-monitor để tách cookie DB key riê
 | Feature | Location | Notes |
 |---------|----------|-------|
 | RAG agent (Zalo @mention → Gemini answer) | `backend/src/rag/` | Stable, deployed on Render |
-| Deal analyzer (issue detection cron) | `backend/src/deal/analyzer.js` | OpenRouter free tier, 15min cron |
+| Deal analyzer (issue detection cron) | `backend/src/deal/analyzer.js` | Gemini free tier, 15min cron |
 | Daily summary (18:00 Mon–Fri) | `backend/src/summary/engine.js` | Sends to each active group |
 | Daily morning alert (8AM) + knowledge gap | `backend/src/alert/daily.js` | Runtime config fix + top 3 unanswered/7 days |
 | Admin dashboard login + auth | `admin/app/login/`, `proxy.ts` | HMAC-SHA256, hard redirect after login |

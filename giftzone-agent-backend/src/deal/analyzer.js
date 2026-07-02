@@ -2,10 +2,12 @@
  * Sales Issue Monitor
  * - Cron 15 phút: đọc messages → detect issues chất lượng sales → lưu DB
  * - Auto-resolve: issues không còn detect → tự chuyển status='resolved'
- * - Dùng OpenRouter tách biệt với Sales Assistant AI
+ * - Dùng chung GEMINI_API_KEY với RAG/Ops (trước đây dùng OpenRouter free
+ *   models riêng nhưng 2/3 model trong fallback chain đã bị gỡ (404),
+ *   model còn lại rate-limit liên tục — chuyển hẳn sang Gemini cho ổn định)
  */
-import OpenAI from 'openai';
 import cron from 'node-cron';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import { MessageType } from 'zca-js';
 import { query } from '../utils/db.js';
 import { getConfig } from '../utils/config.js';
@@ -13,52 +15,35 @@ import { createLogger } from '../utils/logger.js';
 
 const log = createLogger('IssueAI');
 
-// Fallback chain — thử lần lượt khi model trước bị 429/404
-const MODEL_CHAIN = [
-  'meta-llama/llama-3.3-70b-instruct:free',
-  'deepseek/deepseek-r1-0528:free',
-  'google/gemma-3-27b-it:free',
-];
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
 
-function getClient() {
-  const apiKey = process.env.OPENROUTER_API_KEY;
-  if (!apiKey) throw new Error('OPENROUTER_API_KEY chưa được cấu hình');
-  return new OpenAI({
-    baseURL: 'https://openrouter.ai/api/v1',
-    apiKey,
-    defaultHeaders: { 'X-Title': 'GiftZone Sales Monitor' },
-  });
-}
-
-async function callWithFallback(prompt) {
-  const client = getClient();
-  for (const model of MODEL_CHAIN) {
+async function callGemini(prompt, retries = 3) {
+  for (let attempt = 0; attempt < retries; attempt++) {
     try {
-      const response = await client.chat.completions.create({
-        model,
-        messages: [{ role: 'user', content: prompt }],
-        temperature: 0.1,
-        max_tokens: 1500,
-      });
-      log.debug(`Model used: ${model}`);
-      // Chain hoạt động lại → reset trạng thái degraded
+      const result = await model.generateContent(prompt);
+      const text = result.response.text() ?? '[]';
+      // Gemini hoạt động lại → reset trạng thái degraded
       query(`INSERT INTO settings (key, value, description) VALUES ('analyzer_status','ok','Trạng thái deal analyzer')
         ON CONFLICT (key) DO UPDATE SET value='ok', updated_at=NOW()`).catch(() => {});
-      return response.choices[0]?.message?.content ?? '[]';
+      return text;
     } catch (err) {
-      if (err.status === 429 || err.status === 404) {
-        log.warn(`Model ${model} không khả dụng (${err.status}) — thử model tiếp theo...`);
+      const is429 = err.message?.includes('429') || err.status === 429;
+      const is503 = err.message?.includes('503') || err.status === 503;
+      if ((is429 || is503) && attempt < retries - 1) {
+        const wait = Math.pow(2, attempt) * 3000; // 3s, 6s, 12s
+        log.warn(`Gemini ${is429 ? 'rate limit' : 'quá tải'} — đợi ${wait / 1000}s rồi thử lại (lần ${attempt + 1}/${retries})`);
+        await new Promise(r => setTimeout(r, wait));
         continue;
       }
+      // Ghi trạng thái degraded vào settings để dashboard hiển thị
+      try {
+        await query(`INSERT INTO settings (key, value, description) VALUES ('analyzer_status','degraded','Trạng thái deal analyzer')
+          ON CONFLICT (key) DO UPDATE SET value='degraded', updated_at=NOW()`);
+      } catch { /* không crash nếu ghi settings lỗi */ }
       throw err;
     }
   }
-  // Ghi trạng thái degraded vào settings để dashboard hiển thị
-  try {
-    await query(`INSERT INTO settings (key, value, description) VALUES ('analyzer_status','degraded','Trạng thái deal analyzer')
-      ON CONFLICT (key) DO UPDATE SET value='degraded', updated_at=NOW()`);
-  } catch { /* không crash nếu ghi settings lỗi */ }
-  throw new Error('Tất cả models trong fallback chain đều bị rate limit');
 }
 
 // ─── Lấy messages mới kể từ lần analyze cuối của group ──────────────────────
@@ -178,7 +163,7 @@ Cuộc trò chuyện (group ${groupId}):
 ${conversation.slice(0, 6000)}
 </conversation>`;
 
-  const text = await callWithFallback(prompt);
+  const text = await callGemini(prompt);
 
   try {
     const json = text.replace(/```json?\n?/g, '').replace(/```/g, '').trim();
@@ -294,7 +279,7 @@ async function runAnalysis(api = null) {
     } catch (err) {
       log.error(`Lỗi phân tích group ${groupId}:`, err.message);
     }
-    // Tránh 429 rate limit trên OpenRouter free tier
+    // Tránh 429 rate limit trên Gemini free tier
     await new Promise(r => setTimeout(r, 60000));
   }
   log.info('Phân tích issues hoàn tất');
@@ -303,8 +288,8 @@ async function runAnalysis(api = null) {
 // ─── Khởi động cron ───────────────────────────────────────────────────────────
 // api = null (Deal Monitor chạy SKIP_ZALO) → không gửi critical alert, chỉ ghi DB
 export function startDealAnalyzer(api = null) {
-  if (!process.env.OPENROUTER_API_KEY) {
-    log.warn('OPENROUTER_API_KEY chưa cấu hình — Sales Monitor bị tắt');
+  if (!process.env.GEMINI_API_KEY) {
+    log.warn('GEMINI_API_KEY chưa cấu hình — Sales Monitor bị tắt');
     return;
   }
 
