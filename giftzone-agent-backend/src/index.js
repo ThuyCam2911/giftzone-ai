@@ -68,16 +68,17 @@ async function main() {
     }
 
     // 4. Khởi động listener + responder
-    // ENABLE_RAG=false (vd trên giftzone-deal-monitor): chỉ log tin nhắn cho
-    // analyzer, KHÔNG trả lời @mention bằng RAG docs — chỉ instance chính
-    // (giftzone-ai) mới đóng vai trò trợ lý trả lời Sales/khách
+    // Ops Assistant LUÔN bật trên mọi account (tự giới hạn theo group_type='internal').
+    // ENABLE_RAG=false (vd trên giftzone-deal-monitor): chỉ tắt phần trả lời
+    // RAG docs (tài liệu công ty) — account đó không nên trả lời tài liệu cho
+    // khách, nhưng vẫn cần trả lời Ops nếu cũng là thành viên 1 nhóm internal.
     log.info('Bước 4/5: Khởi động Zalo listener...');
+    const enableRagDocs = process.env.ENABLE_RAG !== 'false';
+    const responder = new MentionResponder(api, { enableRagDocs });
     const listener = new GroupListener(api, session.ownId);
-    if (process.env.ENABLE_RAG !== 'false') {
-      const responder = new MentionResponder(api);
-      listener.onMention = (ctx) => responder.handle(ctx);
-    } else {
-      log.info('ENABLE_RAG=false — chế độ monitor-only, không trả lời @mention');
+    listener.onMention = (ctx) => responder.handle(ctx);
+    if (!enableRagDocs) {
+      log.info('ENABLE_RAG=false — tắt trả lời RAG docs, Ops Assistant vẫn hoạt động ở nhóm internal');
     }
     listener.start();
 

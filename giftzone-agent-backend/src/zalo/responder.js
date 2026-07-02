@@ -1,7 +1,10 @@
 /**
  * Responder — xử lý @mention và gửi reply vào group
  * - Nhóm internal: router Ops Assistant (hỏi tình trạng nhóm/issue/KPI, tóm tắt chat)
- * - Còn lại: RAG docs như cũ
+ *   → LUÔN bật trên mọi account, tự giới hạn theo group_type='internal' nên an toàn
+ * - Còn lại: RAG docs — có thể tắt qua enableRagDocs (vd account deal-monitor
+ *   không nên trả lời tài liệu công ty cho khách, nhưng vẫn cần trả lời Ops
+ *   nếu account đó cũng là thành viên 1 nhóm internal nào đó)
  */
 import { MessageType } from 'zca-js';
 import { answer } from '../rag/retriever.js';
@@ -15,8 +18,9 @@ const COOLDOWN_MS = 3000;          // chặn spam @mention từ cùng 1 user
 const INTERNAL_CACHE_MS = 5 * 60 * 1000;
 
 export class MentionResponder {
-  constructor(api) {
+  constructor(api, { enableRagDocs = true } = {}) {
     this.api = api;
+    this.enableRagDocs = enableRagDocs;
     this._lastAsk = new Map();       // senderUid → timestamp lần hỏi cuối
     this._internalGroups = new Set();
     this._internalLoadedAt = 0;
@@ -66,8 +70,12 @@ export class MentionResponder {
           });
           return;
         }
-        // intent = docs → rơi xuống RAG bên dưới
+        // intent = docs → rơi xuống RAG bên dưới (nếu account này bật RAG docs)
       }
+
+      // Account tắt RAG docs (vd deal-monitor): không trả lời tài liệu công ty,
+      // chỉ Ops Assistant ở trên mới được phép trả lời
+      if (!this.enableRagDocs) return;
 
       // 1:1 chat: kèm 3 lượt hỏi-đáp gần nhất để hỏi nối được
       const history = isDirect ? await this._fetchHistory(senderUid) : [];

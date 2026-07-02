@@ -220,7 +220,7 @@ Gemini embedding quota resets ~7:00 AM Vietnam time. If exhausted: set `SKIP_IND
 | Service | Platform | Config |
 |---------|----------|--------|
 | Backend (Sales AI) | Render — `giftzone-ai` | `render.yaml`, account 1, internal sales groups, `ENABLE_RAG` mặc định bật |
-| Backend (Deal Monitor) | Render — `giftzone-deal-monitor` | manual, account 2, customer groups, **`ENABLE_RAG=false`** + `ENABLE_DEAL_ANALYSIS=true` + `INSTANCE_ID=dealmonitor` |
+| Backend (Deal Monitor) | Render — `giftzone-deal-monitor` | manual, account 2, customer groups, **`ENABLE_RAG=false`** (tắt RAG docs, Ops Assistant vẫn chạy nếu account này cũng ở trong nhóm internal) + `ENABLE_DEAL_ANALYSIS=true` + `INSTANCE_ID=dealmonitor` |
 | Admin Dashboard | Vercel — `giftzone-ai.vercel.app` | root dir: `giftzone-agent-admin` |
 | Database | Supabase | project ref: `ytvcmkczealtlvapjjke`, Session Pooler port 5432 |
 
@@ -257,7 +257,7 @@ SUMMARY_CRON         # default: "0 18 * * 1-5"
 SKIP_INDEX           # "true" to skip Drive indexing at startup
 LOG_LEVEL            # debug / info / warn / error (default: info)
 SKIP_ZALO             # "true" = không connect Zalo (Deal Monitor không dùng — cần đọc msg nhóm khách)
-ENABLE_RAG            # "false" = chỉ log tin nhắn, KHÔNG trả lời @mention (set false trên giftzone-deal-monitor)
+ENABLE_RAG            # "false" = tắt trả lời RAG docs (tài liệu công ty) — Ops Assistant vẫn hoạt động ở nhóm internal. Set false trên giftzone-deal-monitor.
 ENABLE_SUMMARY        # "false" = tắt Summary Engine (default: bật)
 ENABLE_DEAL_ANALYSIS  # "true" = bật Sales Issue Monitor/analyzer (default: tắt)
 INSTANCE_ID           # đặt trên deal-monitor để tách cookie DB key riêng (zalo_cookie_<INSTANCE_ID>)
