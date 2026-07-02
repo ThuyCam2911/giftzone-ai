@@ -14,6 +14,44 @@ const log = createLogger('OpsAssistant');
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
 
+// ─── Fallback dựa từ khóa — dùng khi Gemini lỗi/quá tải hoặc misclassify ─────
+// Free tier gemini-2.5-flash-lite thỉnh thoảng 503 — không được để rơi thẳng
+// về "docs" trong trường hợp đó, mất hẳn khả năng trả lời câu hỏi vận hành
+const OPS_KEYWORDS = [
+  'vấn đề', 'issue', 'còn gì không', 'ai đang', 'phản hồi chậm', 'im lặng',
+  'kpi', 'hiệu suất', 'chưa reply', 'chưa trả lời', 'phàn nàn', 'complain',
+  'chậm trễ', 'tình hình', 'báo cáo', 'ai làm', 'ai chưa', 'sai gì',
+];
+const SUMMARY_KEYWORDS = ['tóm tắt', 'tổng hợp', 'recap', 'điểm qua', 'review lại'];
+
+// Từ để hỏi chung (không phải tên nhóm cụ thể) — "nhóm nào", "nhóm gì" v.v.
+const GENERIC_WORDS = new Set(['nào', 'gì', 'ai', 'đó', 'này', 'khách']);
+
+function extractGroupNameHeuristic(text) {
+  const m = text.match(
+    /(?:nhóm|group)\s+([^\s][\s\S]*?)(?:\s+(?:còn|có|đang|bị|không|à|nhé|giúp|thế nào|ra sao|xem|nay|\d)|[?.!]|$)/i
+  );
+  const name = m?.[1]?.trim() || null;
+  return name && !GENERIC_WORDS.has(name.toLowerCase()) ? name : null;
+}
+
+function extractDaysHeuristic(text) {
+  const m = text.match(/(\d+)\s*ngày/);
+  return m ? Number(m[1]) : null;
+}
+
+function heuristicClassify(userQuery) {
+  const q = userQuery.toLowerCase();
+  const groupName = extractGroupNameHeuristic(userQuery);
+  if (SUMMARY_KEYWORDS.some(k => q.includes(k))) {
+    return { intent: 'summary', group_name: groupName, days: extractDaysHeuristic(userQuery) };
+  }
+  if (OPS_KEYWORDS.some(k => q.includes(k))) {
+    return { intent: 'ops', group_name: groupName, days: null };
+  }
+  return { intent: 'docs' };
+}
+
 // ─── Bước 1: Phân loại intent ────────────────────────────────────────────────
 async function classifyIntent(userQuery) {
   const prompt = `Phân loại câu hỏi của nhân viên nội bộ GiftZone vào 1 trong 3 intent:
@@ -31,11 +69,20 @@ Câu hỏi: "${userQuery.slice(0, 500)}"`;
     const result = await model.generateContent(prompt);
     const text = result.response.text().replace(/```json?\n?/g, '').replace(/```/g, '').trim();
     const parsed = JSON.parse(text);
-    if (!['ops', 'summary', 'docs'].includes(parsed.intent)) return { intent: 'docs' };
+    if (!['ops', 'summary', 'docs'].includes(parsed.intent)) {
+      return heuristicClassify(userQuery);
+    }
+    // Gemini nói "docs" nhưng câu hỏi có tín hiệu ops/summary rõ ràng → tin heuristic hơn
+    // (false negative về RAG docs tệ hơn false positive vào ops — ops vẫn tự nói
+    // "chưa đủ dữ liệu" khi không tìm thấy gì, không bịa)
+    if (parsed.intent === 'docs') {
+      const fallback = heuristicClassify(userQuery);
+      if (fallback.intent !== 'docs') return { ...fallback, group_name: parsed.group_name ?? fallback.group_name };
+    }
     return parsed;
   } catch (err) {
-    log.warn('Classify intent lỗi — fallback docs:', err.message);
-    return { intent: 'docs' };
+    log.warn('Classify intent lỗi — dùng keyword fallback:', err.message);
+    return heuristicClassify(userQuery);
   }
 }
 
