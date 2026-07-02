@@ -88,7 +88,7 @@ async function main() {
   }
 
   if (process.env.ENABLE_DEAL_ANALYSIS === 'true') {
-    startDealAnalyzer();
+    startDealAnalyzer(api); // api=null nếu SKIP_ZALO → không gửi critical alert
   } else {
     log.info('Deal Intelligence tắt (ENABLE_DEAL_ANALYSIS != true)');
   }

@@ -62,6 +62,14 @@ export default async function OverviewPage({
           <div className="max-w-5xl mx-auto space-y-6">
             <SessionAlert status={data.sessionStatus} />
 
+            {data.analyzerStatus === 'degraded' && (
+              <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-800">
+                ⚠️ <span className="font-medium">Deal Analyzer đang degraded</span> — toàn bộ
+                model chain OpenRouter bị rate limit. Issue mới sẽ không được phát hiện cho đến
+                khi quota hồi phục.
+              </div>
+            )}
+
             <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
               <StatsCard label="Nhóm có hội thoại" value={data.totalGroups}  icon={Users}         accent="green" />
               <StatsCard label="Tin nhắn ghi nhận"  value={data.messages}    icon={MessageSquare}  accent="blue" />

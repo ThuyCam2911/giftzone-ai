@@ -176,6 +176,24 @@ export async function initSchema() {
       added_at    TIMESTAMPTZ DEFAULT NOW()
     )
   `);
+  // Mốc lần analyze cuối per group — thay cho việc suy ra từ sales_issues
+  await query(`
+    CREATE TABLE IF NOT EXISTS analyzer_runs (
+      group_id TEXT PRIMARY KEY,
+      last_run TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  // Drive folders để index (quản lý qua Dashboard Settings)
+  await query(`
+    CREATE TABLE IF NOT EXISTS drive_folders (
+      id         SERIAL PRIMARY KEY,
+      folder_id  TEXT NOT NULL UNIQUE,
+      note       TEXT NOT NULL DEFAULT '',
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+
   // Migrations — thêm column mới nếu chưa tồn tại
   await query(`ALTER TABLE gz_members  ADD COLUMN IF NOT EXISTS role        TEXT      NOT NULL DEFAULT 'sales'`);
   await query(`ALTER TABLE ai_logs     ADD COLUMN IF NOT EXISTS is_answered BOOLEAN   DEFAULT true`);

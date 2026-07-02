@@ -16,7 +16,7 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
 
 // ─── Lấy tin nhắn trong khoảng thời gian ─────────────────────────────────────
-async function fetchMessages(groupId, since) {
+export async function fetchMessages(groupId, since) {
   const result = await query(
     `SELECT sender_name, content, msg_ts
      FROM messages
@@ -27,17 +27,21 @@ async function fetchMessages(groupId, since) {
   return result.rows;
 }
 
-// ─── Lấy tất cả group IDs đang active ────────────────────────────────────────
+// ─── Lấy group IDs nội bộ đang active ────────────────────────────────────────
+// CHỈ nhóm internal — summary chứa nhận định nội bộ, không được gửi vào nhóm khách
 async function getActiveGroups(since) {
   const result = await query(
-    `SELECT DISTINCT group_id FROM messages WHERE msg_ts >= $1`,
+    `SELECT DISTINCT m.group_id
+     FROM messages m
+     INNER JOIN group_names gn ON gn.group_id = m.group_id
+     WHERE m.msg_ts >= $1 AND gn.group_type = 'internal'`,
     [since]
   );
   return result.rows.map(r => r.group_id);
 }
 
 // ─── Tạo summary bằng Claude ──────────────────────────────────────────────────
-async function generateSummary(messages, type = 'daily') {
+export async function generateSummary(messages, type = 'daily') {
   if (messages.length === 0) return null;
 
   const conversation = messages
@@ -60,7 +64,7 @@ async function generateSummary(messages, type = 'daily') {
 
 😊 *Sentiment chung:* [tích cực/trung tính/cần chú ý]
 
-Cuộc trò chuyện:\n${conversation}`
+Cuộc trò chuyện:\n${conversation.slice(0, 8000)}`
     : `Tổng hợp tuần này thành weekly report theo format:
 
 📈 *WEEKLY SUMMARY — Tuần ${getWeekNumber()}*

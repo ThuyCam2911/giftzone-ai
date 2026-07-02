@@ -11,6 +11,7 @@ export interface OverviewData {
   lastIndexedAt: string | null;
   sessionStatus: string;
   sessionLastSeen: string | null;
+  analyzerStatus: string;
   agentName: string;
   daysChart: DayCount[];
   topQuestions: { question: string; count: string }[];
@@ -39,7 +40,7 @@ export async function getOverviewData(from: string, to: string): Promise<Overvie
       `SELECT COUNT(*) AS count, MAX(indexed_at) AS last_indexed FROM doc_chunks`,
     ),
     query<{ key: string; value: string }>(
-      `SELECT key, value FROM settings WHERE key IN ('session_status', 'session_last_seen', 'agent_name')`,
+      `SELECT key, value FROM settings WHERE key IN ('session_status', 'session_last_seen', 'agent_name', 'analyzer_status')`,
     ),
     query<{ day: string; count: string }>(
       `SELECT TO_CHAR(created_at AT TIME ZONE 'Asia/Ho_Chi_Minh', 'YYYY-MM-DD') AS day, COUNT(*) AS count
@@ -91,6 +92,7 @@ export async function getOverviewData(from: string, to: string): Promise<Overvie
     lastIndexedAt:  chunks[0]?.last_indexed ?? null,
     sessionStatus:  s['session_status'] ?? 'unknown',
     sessionLastSeen: s['session_last_seen'] ?? null,
+    analyzerStatus: s['analyzer_status'] ?? 'ok',
     agentName:      s['agent_name'] ?? 'GiftZone AI',
     daysChart,
     topQuestions:   topQ,

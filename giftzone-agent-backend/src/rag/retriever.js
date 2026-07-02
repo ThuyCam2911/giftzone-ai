@@ -26,7 +26,7 @@ Nhiệm vụ:
 - Dùng tiếng Việt, tone thân thiện, chuyên nghiệp
 - Nếu câu hỏi mơ hồ → hỏi lại để làm rõ`;
 
-export async function answer(userQuery) {
+export async function answer(userQuery, history = []) {
   const start = Date.now();
   log.info(`Query: "${userQuery}"`);
 
@@ -60,13 +60,19 @@ export async function answer(userQuery) {
     .map((c, i) => `[${i + 1}] Từ "${c.file_name}":\n${c.content}`)
     .join('\n\n---\n\n');
 
-  // 4. Gọi Gemini
+  // 4. Gọi Gemini (kèm lịch sử hỏi-đáp gần nhất nếu có — cho phép hỏi nối trong 1:1)
+  const historyBlock = history.length > 0
+    ? `\nLịch sử hỏi-đáp gần đây với người này (để hiểu ngữ cảnh câu hỏi nối):\n`
+      + history.map(h => `Hỏi: ${h.query}\nĐáp: ${String(h.answer).slice(0, 300)}`).join('\n---\n')
+      + '\n'
+    : '';
+
   const prompt = `${SYSTEM_PROMPT}
 
 Tài liệu tham khảo:
 
 ${context}
-
+${historyBlock}
 ---
 
 Câu hỏi của Sales: ${userQuery}`;

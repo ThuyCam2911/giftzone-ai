@@ -31,9 +31,23 @@ function createDriveClient() {
   return google.drive({ version: 'v3', auth });
 }
 
-// ─── List files trong folder (hoặc chính file đó) ────────────────────────────
-async function listFiles(drive) {
-  const id = getConfig('drive_folder_id', process.env.DRIVE_FOLDER_ID);
+// ─── Lấy danh sách folder/file IDs cần index ─────────────────────────────────
+// Nguồn: bảng drive_folders (quản lý qua Dashboard) + drive_folder_id (settings/ENV)
+async function getSourceIds() {
+  const ids = new Set();
+  try {
+    const { rows } = await query(`SELECT folder_id FROM drive_folders`);
+    for (const r of rows) ids.add(r.folder_id.trim());
+  } catch { /* bảng chưa tồn tại thì bỏ qua */ }
+
+  const legacy = getConfig('drive_folder_id', process.env.DRIVE_FOLDER_ID);
+  if (legacy) ids.add(legacy.trim());
+
+  return [...ids].filter(Boolean);
+}
+
+// ─── List files của 1 folder/file ID ─────────────────────────────────────────
+async function listFilesForId(drive, id) {
   const meta = await drive.files.get({ fileId: id, fields: 'id,name,mimeType' });
   const isFolder = meta.data.mimeType === 'application/vnd.google-apps.folder';
 
@@ -46,6 +60,27 @@ async function listFiles(drive) {
     return res.data.files;
   }
   return [meta.data];
+}
+
+// ─── List files từ TẤT CẢ nguồn (dedup theo file id) ─────────────────────────
+async function listFiles(drive) {
+  const sourceIds = await getSourceIds();
+  if (sourceIds.length === 0) {
+    log.warn('Không có Drive folder nào được cấu hình (drive_folders table hoặc DRIVE_FOLDER_ID)');
+    return [];
+  }
+  log.info(`Index từ ${sourceIds.length} nguồn Drive`);
+
+  const seen = new Map();
+  for (const id of sourceIds) {
+    try {
+      const files = await listFilesForId(drive, id);
+      for (const f of files) seen.set(f.id, f);
+    } catch (err) {
+      log.error(`Không đọc được nguồn ${id}:`, err.message);
+    }
+  }
+  return [...seen.values()];
 }
 
 // ─── Parse file → text ────────────────────────────────────────────────────────

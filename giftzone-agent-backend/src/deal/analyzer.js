@@ -6,7 +6,9 @@
  */
 import OpenAI from 'openai';
 import cron from 'node-cron';
+import { MessageType } from 'zca-js';
 import { query } from '../utils/db.js';
+import { getConfig } from '../utils/config.js';
 import { createLogger } from '../utils/logger.js';
 
 const log = createLogger('IssueAI');
@@ -39,6 +41,9 @@ async function callWithFallback(prompt) {
         max_tokens: 1500,
       });
       log.debug(`Model used: ${model}`);
+      // Chain hoạt động lại → reset trạng thái degraded
+      query(`INSERT INTO settings (key, value, description) VALUES ('analyzer_status','ok','Trạng thái deal analyzer')
+        ON CONFLICT (key) DO UPDATE SET value='ok', updated_at=NOW()`).catch(() => {});
       return response.choices[0]?.message?.content ?? '[]';
     } catch (err) {
       if (err.status === 429 || err.status === 404) {
@@ -57,16 +62,18 @@ async function callWithFallback(prompt) {
 }
 
 // ─── Lấy messages mới kể từ lần analyze cuối của group ──────────────────────
+// Mốc lưu ở analyzer_runs — trước đây suy từ MAX(detected_at) của sales_issues,
+// gây đọc lại nhiều ngày messages khi group lâu không có issue mới
 async function fetchNewMessages(groupId) {
   const lastRun = await query(
-    `SELECT MAX(detected_at) as last FROM sales_issues WHERE group_id = $1`,
+    `SELECT last_run FROM analyzer_runs WHERE group_id = $1`,
     [groupId]
   );
-  const since = lastRun.rows[0]?.last ?? new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const since = lastRun.rows[0]?.last_run ?? new Date(Date.now() - 24 * 60 * 60 * 1000);
   const result = await query(
     `SELECT sender_uid, sender_name, content, msg_ts
      FROM messages
-     WHERE group_id = $1 AND msg_ts > $2
+     WHERE group_id = $1 AND msg_ts > $2 AND msg_type = 'text'
      ORDER BY msg_ts ASC`,
     [groupId, since]
   );
@@ -78,17 +85,22 @@ async function getGroupsWithNewMessages() {
   const result = await query(
     `SELECT DISTINCT m.group_id
      FROM messages m
-     LEFT JOIN (
-       SELECT group_id, MAX(detected_at) as last_run
-       FROM sales_issues
-       GROUP BY group_id
-     ) s ON m.group_id = s.group_id
-     WHERE m.msg_ts > COALESCE(s.last_run, NOW() - INTERVAL '24 hours')
+     LEFT JOIN analyzer_runs ar ON ar.group_id = m.group_id
+     WHERE m.msg_ts > COALESCE(ar.last_run, NOW() - INTERVAL '24 hours')
        AND m.group_id NOT IN (
          SELECT group_id FROM group_names WHERE group_type = 'internal'
        )`
   );
   return result.rows.map(r => r.group_id);
+}
+
+// ─── Ghi mốc analyze cuối ────────────────────────────────────────────────────
+async function markAnalyzed(groupId) {
+  await query(
+    `INSERT INTO analyzer_runs (group_id, last_run) VALUES ($1, NOW())
+     ON CONFLICT (group_id) DO UPDATE SET last_run = NOW()`,
+    [groupId]
+  );
 }
 
 // ─── Gọi OpenRouter để phát hiện issues ──────────────────────────────────────
@@ -197,13 +209,40 @@ async function upsertIssue(groupId, issue) {
        issue.title, issue.description ?? '', issue.evidence ?? '']
     );
     log.info(`Issue mới: [${issue.severity}] ${issue.issue_type} — group ${groupId}`);
-  } else if (prev.status === 'open') {
+    return true; // issue mới
+  }
+  if (prev.status === 'open') {
     await query(
       `UPDATE sales_issues SET evidence=$1, description=$2, updated_at=NOW() WHERE id=$3`,
       [issue.evidence ?? '', issue.description ?? '', prev.id]
     );
   }
   // Nếu đã resolved → bỏ qua (không reopen)
+  return false;
+}
+
+// ─── Gửi alert critical NGAY qua Zalo (không đợi daily alert 8AM) ────────────
+async function sendCriticalAlert(api, groupId, issues) {
+  if (!api || issues.length === 0) return;
+  const adminGroupId = getConfig('admin_group_id') || process.env.ZALO_TEST_GROUP_ID;
+  if (!adminGroupId) return;
+
+  const gn = await query(`SELECT name FROM group_names WHERE group_id = $1`, [groupId]);
+  const groupName = gn.rows[0]?.name ?? groupId;
+
+  const lines = [`🚨 *CẢNH BÁO CRITICAL — nhóm "${groupName}"*\n`];
+  for (const i of issues) {
+    lines.push(`🔴 ${i.title}`);
+    if (i.evidence) lines.push(`   Bằng chứng: "${String(i.evidence).slice(0, 150)}"`);
+  }
+  lines.push(`\n→ Xử lý ngay, không đợi báo cáo 8AM.`);
+
+  try {
+    await api.sendMessage({ msg: lines.join('\n') }, adminGroupId, MessageType.GroupMessage);
+    log.info(`Critical alert đã gửi — nhóm ${groupName}`);
+  } catch (err) {
+    log.error('Gửi critical alert lỗi:', err.message);
+  }
 }
 
 // ─── Auto-resolve: issues không còn detect trong lần này ─────────────────────
@@ -224,7 +263,7 @@ async function autoResolve(groupId, detectedTypes) {
 }
 
 // ─── Chạy phân tích cho tất cả groups ────────────────────────────────────────
-async function runAnalysis() {
+async function runAnalysis(api = null) {
   log.info('Bắt đầu phân tích issues...');
   const groups = await getGroupsWithNewMessages();
   if (groups.length === 0) { log.info('Không có group nào có message mới'); return; }
@@ -234,13 +273,22 @@ async function runAnalysis() {
     try {
       const messages = await fetchNewMessages(groupId);
       const issues = await detectIssues(groupId, messages);
+
+      const newCriticals = [];
       for (const issue of issues) {
-        await upsertIssue(groupId, issue);
+        const isNew = await upsertIssue(groupId, issue);
+        if (isNew && issue.severity === 'critical') newCriticals.push(issue);
       }
+
+      // Critical mới → báo Zalo ngay, không đợi daily alert 8AM
+      await sendCriticalAlert(api, groupId, newCriticals);
+
       const detectedTypes = issues.map(i => i.issue_type);
-      // Chỉ auto-resolve khi có đủ messages để phân tích (tránh resolve nhầm vì thiếu data)
+      // Chỉ auto-resolve + ghi mốc khi có đủ messages để phân tích
+      // (<5 tin → giữ mốc cũ để tin nhắn dồn lại cho lần sau, không bị nhảy cóc)
       if (messages.length >= 5) {
         await autoResolve(groupId, detectedTypes);
+        await markAnalyzed(groupId);
       }
       log.info(`Group ${groupId}: ${issues.length} issues detected`);
     } catch (err) {
@@ -253,15 +301,16 @@ async function runAnalysis() {
 }
 
 // ─── Khởi động cron ───────────────────────────────────────────────────────────
-export function startDealAnalyzer() {
+// api = null (Deal Monitor chạy SKIP_ZALO) → không gửi critical alert, chỉ ghi DB
+export function startDealAnalyzer(api = null) {
   if (!process.env.OPENROUTER_API_KEY) {
     log.warn('OPENROUTER_API_KEY chưa cấu hình — Sales Monitor bị tắt');
     return;
   }
 
   cron.schedule('*/15 * * * *', () => {
-    runAnalysis().catch(err => log.error('Issue analysis crash:', err.message));
+    runAnalysis(api).catch(err => log.error('Issue analysis crash:', err.message));
   }, { timezone: 'Asia/Ho_Chi_Minh' });
 
-  log.info('Sales Issue Monitor started — phân tích mỗi 15 phút');
+  log.info(`Sales Issue Monitor started — phân tích mỗi 15 phút${api ? ', critical alert bật' : ''}`);
 }
