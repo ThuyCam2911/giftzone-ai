@@ -12,6 +12,17 @@ interface ConfigRow {
   updated_at: string;
 }
 
+// Giá trị nhạy cảm không bao giờ được rời khỏi server (kể cả trong RSC payload
+// gửi xuống browser) — mask ngay tại nguồn trước khi truyền prop cho Client Component
+const SENSITIVE_PREFIX = 'zalo_cookie';
+function maskSensitive(rows: ConfigRow[]): ConfigRow[] {
+  return rows.map(r =>
+    r.key.startsWith(SENSITIVE_PREFIX)
+      ? { ...r, value: r.value ? '••••••••••••' : '' }
+      : r
+  );
+}
+
 // Keys luôn hiển thị dù chưa có trong DB (backend chưa restart để seed)
 const KNOWN_KEYS: Omit<ConfigRow, 'updated_at'>[] = [
   { key: 'agent_name',      value: 'GiftZone AI',   description: 'Tên hiển thị của AI agent trong Zalo' },
@@ -48,13 +59,14 @@ export default async function SettingsPage() {
     getDriveFolders(),
   ]);
 
-  const rowMap = Object.fromEntries(rows.map(r => [r.key, r]));
+  const maskedRows = maskSensitive(rows);
+  const rowMap = Object.fromEntries(maskedRows.map(r => [r.key, r]));
 
   // Merge: known keys first (with DB value if exists), then any extra DB keys
   const knownKeys = new Set(KNOWN_KEYS.map(k => k.key));
   const merged: ConfigRow[] = [
     ...KNOWN_KEYS.map(k => rowMap[k.key] ?? { ...k, updated_at: '' }),
-    ...rows.filter(r => !knownKeys.has(r.key)),
+    ...maskedRows.filter(r => !knownKeys.has(r.key)),
   ];
 
   return (

@@ -44,6 +44,7 @@ ENV file: `giftzone-agent-admin/.env.local`
 ```
 DASHBOARD_PASSWORD=...
 SESSION_SECRET=...
+SETTINGS_ENC_KEY=...  # phải khớp giá trị trên backend (Render) — mã hoá zalo_cookie at-rest
 PG_HOST=localhost
 PG_PORT=5433
 PG_DATABASE=giftzone_agent
@@ -229,6 +230,7 @@ Vercel env vars (production):
 DATABASE_URL=postgresql://postgres.[PROJECT_REF]:[PASSWORD]@aws-1-...pooler.supabase.com:5432/postgres
 DASHBOARD_PASSWORD=...
 SESSION_SECRET=...
+SETTINGS_ENC_KEY=...  # phải khớp giá trị trên backend (Render) — mã hoá zalo_cookie at-rest
 ```
 
 ---
@@ -246,6 +248,7 @@ GOOGLE_CLIENT_SECRET
 GOOGLE_REFRESH_TOKEN
 DRIVE_FOLDER_ID      # folder OR single file ID
 GEMINI_API_KEY       # dùng chung cho RAG, Ops Assistant, Summary, Embedding, Deal Analyzer
+SETTINGS_ENC_KEY     # hex 64 ký tự (32 bytes) — mã hoá zalo_cookie at-rest, PHẢI khớp với giftzone-agent-admin
 PG_HOST
 PG_PORT=5433
 PG_DATABASE          # must set PG_DATABASE=postgres on Render (default is giftzone_agent for local Docker)
@@ -361,6 +364,43 @@ INSTANCE_ID           # đặt trên deal-monitor để tách cookie DB key riê
 
 ---
 
+## Security Assessment (2026-07-04) — items #2,3,4 (Trung bình) và #2,3,4 (Khuyến nghị) đã fix 2026-07-06; #1 nền tảng và #4 pháp lý cần xử lý riêng
+
+Đánh giá bảo mật luồng chat Zalo Agent — dùng `zca-js` (không phải API chính thức Zalo, impersonate session qua cookie lấy bằng extension J2TEAM Cookie). Xếp theo mức độ rủi ro.
+
+### 🔴 Cao
+
+1. **Mô hình nền tảng dựa trên "session hijacking" chính tài khoản mình** — `zca-js` vi phạm ToS Zalo (tự động hoá tài khoản cá nhân). Tài khoản có thể bị khoá bất kỳ lúc nào. Cookie = toàn quyền tài khoản, không 2FA/device-binding nào khác ngoài kiểm tra IP. Đây là rủi ro nền tảng, không vá được bằng code.
+2. ✅ **FIXED 2026-07-06** — ~~Zalo cookie lưu plaintext trong DB, hiển thị plaintext trên Dashboard~~ — `settings.zalo_cookie*` giờ mã hoá AES-256-GCM at-rest (`utils/crypto.js` backend, `lib/crypto.ts` admin, cùng format `enc:v1:iv:tag:ciphertext`, key `SETTINGS_ENC_KEY` set trên cả Render + Vercel; không set key → fallback plaintext cho local dev). Settings UI + `settings/page.tsx` (Server Component) + `/api/config` GET đều mask giá trị thành `••••••••••••` trước khi rời server — không còn leak qua RSC payload. Textarea để trống = giữ nguyên, nhập mới = ghi đè (không thể vô tình gửi lại chuỗi mask).
+3. ✅ **FIXED 2026-07-06** — ~~`/api/config` (GET/PUT) không tự gọi `isAuthenticated()`~~ — đã thêm check tường minh, không còn dựa hoàn toàn vào `proxy.ts` middleware.
+4. **Chat khách hàng bị log + gửi Gemini (bên thứ 3, nước ngoài) không thông báo/đồng ý** — `giftzone-deal-monitor` lưu vĩnh viễn mọi tin nhắn nhóm khách vào `messages`, gửi cho Gemini API phân tích issues/sentiment. Khách không biết đang bị AI phân tích/lưu trữ. Rủi ro pháp lý theo Nghị định 13/2023/NĐ-CP (bảo vệ dữ liệu cá nhân) — yêu cầu thông báo, nhiều trường hợp cần đồng ý, đánh giá tác động khi chuyển dữ liệu ra nước ngoài.
+
+### 🟡 Trung bình
+
+- ✅ **FIXED 2026-07-06** — ~~Không rate-limit `/login`~~ — thêm bảng `login_attempts`, chặn 5 lần sai/10 phút theo IP (`x-forwarded-for`)
+- Không có data retention/xoá dữ liệu — `messages`, `ai_logs`, `sales_issues` tích luỹ vô thời hạn, không đáp ứng được quyền xoá dữ liệu của khách hàng (NĐ13/2023)
+- Cookie sống rất dài, cron tự refresh 3AM từ chính session Chrome gốc — không xoay vòng credential thật, chỉ kéo dài tuổi thọ cùng 1 phiên
+- So sánh token/password không constant-time (`token === expected` trong `lib/auth.ts`, `proxy.ts`) — lý thuyết dễ timing attack, rủi ro thực tế thấp qua network
+
+### 🟢 Đã làm tốt
+
+- Prompt injection guard: `analyzer.js` (`<conversation>`) và `ops/assistant.js` (`<du_lieu_van_hanh>`) đều wrap nội dung chat trong XML tag trước khi đưa vào prompt Gemini
+- `.env`, cookie file gitignore đúng, chưa từng commit nhầm
+- Token dashboard dùng HMAC-SHA256, không phải base64 reversible
+- Health endpoint không leak thông tin (`res.end('ok')`)
+
+### Khuyến nghị ưu tiên
+
+1. ✅ Đã thêm `isAuthenticated()` tường minh vào `/api/config`
+2. ✅ Đã mask cookie field trên Settings UI
+3. ✅ Đã mã hoá `zalo_cookie` at-rest trong DB (AES-256-GCM)
+4. ✅ Đã rate-limit `/login` theo IP
+5. ⏳ **Chưa làm — cần bàn với người phụ trách pháp lý**: thông báo tối thiểu cho khách về việc chat được AI phân tích/lưu trữ (giảm rủi ro NĐ13/2023). Đây không phải vấn đề code, cần quyết định từ phía kinh doanh/pháp lý.
+
+**⚠️ Việc cần làm để fix có hiệu lực:** set biến môi trường `SETTINGS_ENC_KEY` (chuỗi hex 64 ký tự = 32 bytes, vd `openssl rand -hex 32`) — **giống hệt giá trị** trên cả Render (`giftzone-ai`, `giftzone-deal-monitor`) và Vercel (`giftzone-agent-admin`). Nếu không set, hệ thống fallback về plaintext (không crash) nhưng mất tác dụng mã hoá.
+
+---
+
 ## Known Bugs Fixed
 
 | File | Bug | Fix |
@@ -389,3 +429,5 @@ INSTANCE_ID           # đặt trên deal-monitor để tách cookie DB key riê
 | `deal/analyzer.js` | `autoResolve()` called when < 5 messages → resolves open issues with no evidence | Guard: only call when `messages.length >= 5` |
 | `zalo/listener.js` | gz_members cache timestamp not set on DB error → stampede of failed queries under DB outage | Update `_gzMembersLoadedAt` before `await` to prevent retry flood |
 | `app/api/issues/[id]/route.ts` | SQL string interpolation for `resolved_at` (pattern risk) | Replaced with `CASE WHEN $1='resolved' THEN NOW() ELSE NULL END` |
+| `app/api/config/route.ts` | No auth check, relied solely on `proxy.ts` middleware; cookie leaked plaintext via RSC payload in `settings/page.tsx` | Added `isAuthenticated()`, AES-256-GCM encryption at rest, mask cookie before it ever leaves the server (page.tsx + API GET) |
+| `app/api/auth/route.ts` | No rate limiting — dashboard password brute-forceable | Added `login_attempts` table, 5 failures/10min per IP → 429 |
