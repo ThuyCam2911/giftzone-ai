@@ -32,7 +32,11 @@ function extractGroupNameHeuristic(text) {
     /(?:nhóm|group)\s+([^\s][\s\S]*?)(?:\s+(?:còn|có|đang|bị|không|à|nhé|giúp|thế nào|ra sao|xem|nay|\d)|[?.!]|$)/i
   );
   const name = m?.[1]?.trim() || null;
-  return name && !GENERIC_WORDS.has(name.toLowerCase()) ? name : null;
+  if (!name) return null;
+  // Loại nếu TOÀN BỘ các từ đều là từ hỏi chung ("gì đó", "nào đó" v.v.)
+  const words = name.toLowerCase().split(/\s+/);
+  const allGeneric = words.every(w => GENERIC_WORDS.has(w));
+  return allGeneric ? null : name;
 }
 
 function extractDaysHeuristic(text) {
@@ -53,7 +57,10 @@ function heuristicClassify(userQuery) {
 }
 
 // ─── Bước 1: Phân loại intent ────────────────────────────────────────────────
-async function classifyIntent(userQuery) {
+// Heuristic chạy trước (miễn phí, không gọi API). Chỉ gọi Gemini khi heuristic
+// không đủ tự tin — tiết kiệm 1 lệnh gọi/token cho phần lớn câu hỏi ops thực tế
+// (người dùng tự nhiên hay dùng đúng các từ khoá như "vấn đề", "tóm tắt"...)
+async function classifyWithGemini(userQuery, heuristicHint) {
   const prompt = `Phân loại câu hỏi của nhân viên nội bộ GiftZone vào 1 trong 3 intent:
 
 - "ops": hỏi về tình trạng vận hành — issues/vấn đề của nhóm khách, nhóm nào im lặng, ai phản hồi chậm, KPI nhân viên, tình hình chăm sóc khách
@@ -66,24 +73,37 @@ Trả về JSON thuần, không markdown:
 Câu hỏi: "${userQuery.slice(0, 500)}"`;
 
   try {
-    const result = await model.generateContent(prompt);
+    const result = await model.generateContent({
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      generationConfig: { temperature: 0, maxOutputTokens: 150 },
+    });
     const text = result.response.text().replace(/```json?\n?/g, '').replace(/```/g, '').trim();
     const parsed = JSON.parse(text);
     if (!['ops', 'summary', 'docs'].includes(parsed.intent)) {
-      return heuristicClassify(userQuery);
+      return heuristicHint;
     }
     // Gemini nói "docs" nhưng câu hỏi có tín hiệu ops/summary rõ ràng → tin heuristic hơn
     // (false negative về RAG docs tệ hơn false positive vào ops — ops vẫn tự nói
     // "chưa đủ dữ liệu" khi không tìm thấy gì, không bịa)
-    if (parsed.intent === 'docs') {
-      const fallback = heuristicClassify(userQuery);
-      if (fallback.intent !== 'docs') return { ...fallback, group_name: parsed.group_name ?? fallback.group_name };
+    if (parsed.intent === 'docs' && heuristicHint.intent !== 'docs') {
+      return { ...heuristicHint, group_name: parsed.group_name ?? heuristicHint.group_name };
     }
     return parsed;
   } catch (err) {
     log.warn('Classify intent lỗi — dùng keyword fallback:', err.message);
-    return heuristicClassify(userQuery);
+    return heuristicHint;
   }
+}
+
+async function classifyIntent(userQuery) {
+  const heuristic = heuristicClassify(userQuery);
+  // Tự tin: ops (từ khoá vận hành khá rõ nghĩa) hoặc summary có kèm tên nhóm
+  const confident = heuristic.intent === 'ops' || (heuristic.intent === 'summary' && heuristic.group_name);
+  if (confident) {
+    log.debug(`Heuristic fast-path: ${heuristic.intent} — bỏ qua Gemini classify call`);
+    return heuristic;
+  }
+  return classifyWithGemini(userQuery, heuristic);
 }
 
 // ─── Resolve tên nhóm → group_id ─────────────────────────────────────────────
@@ -237,7 +257,10 @@ ${context.slice(0, 12000)}
 
 Câu hỏi của quản lý: ${userQuery}`;
 
-  const result = await model.generateContent(prompt);
+  const result = await model.generateContent({
+    contents: [{ role: 'user', parts: [{ text: prompt }] }],
+    generationConfig: { temperature: 0.3, maxOutputTokens: 600 }, // ~10 dòng theo yêu cầu prompt
+  });
   return result.response.text() ?? 'Có lỗi xảy ra, vui lòng thử lại.';
 }
 

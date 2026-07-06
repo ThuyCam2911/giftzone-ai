@@ -209,6 +209,11 @@ All timestamps: `TIMESTAMPTZ`. Group/User IDs: `TEXT` (Zalo IDs are large number
 
 Gemini embedding quota resets ~7:00 AM Vietnam time. If exhausted: set `SKIP_INDEX=true`, restart, run `npm run index:drive` after reset.
 
+**Tối ưu số lệnh gọi/token (2026-07-06):**
+- `ops/assistant.js` `classifyIntent()` — heuristic (keyword, miễn phí) chạy trước; chỉ gọi Gemini khi heuristic không đủ tự tin (không match keyword rõ, hoặc `summary` mà thiếu tên nhóm). Trước đây gọi Gemini vô điều kiện cho MỌI @mention trong nhóm internal → giờ phần lớn câu hỏi ops/summary thường gặp bỏ qua hẳn 1 lệnh gọi
+- Tất cả `generateContent()` calls (retriever, ops, summary, analyzer) đều thêm `generationConfig.maxOutputTokens` — trước đây không giới hạn, dễ lãng phí token nếu model trả lời dài hơn cần thiết. Giá trị theo đúng yêu cầu format trong prompt (vd RAG/Ops trả lời ngắn ~10 dòng → 600 tokens, summary "dưới 300 từ" → 1200, analyzer JSON issues → 1500 giữ nguyên mức cũ)
+- `classifyIntent` dùng `temperature: 0` — output JSON ngắn, cần ổn định/deterministic, không cần sáng tạo
+
 ### Zalo Session Constraints
 
 - **One web connection per account** — close all `chat.zalo.me` tabs before deploying

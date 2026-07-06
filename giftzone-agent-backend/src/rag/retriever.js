@@ -77,7 +77,10 @@ ${historyBlock}
 
 Câu hỏi của Sales: ${userQuery}`;
 
-  const result = await model.generateContent(prompt);
+  const result = await model.generateContent({
+    contents: [{ role: 'user', parts: [{ text: prompt }] }],
+    generationConfig: { temperature: 0.3, maxOutputTokens: 600 }, // reply ngắn gọn theo design.md (5-7 dòng)
+  });
   const answerText = result.response.text() ?? 'Có lỗi xảy ra, vui lòng thử lại.';
   const sources = [...new Set(chunks.map(c => c.file_name))];
   const latency_ms = Date.now() - start;

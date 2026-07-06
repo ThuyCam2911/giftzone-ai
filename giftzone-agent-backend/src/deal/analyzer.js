@@ -21,7 +21,10 @@ const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
 async function callGemini(prompt, retries = 3) {
   for (let attempt = 0; attempt < retries; attempt++) {
     try {
-      const result = await model.generateContent(prompt);
+      const result = await model.generateContent({
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        generationConfig: { temperature: 0.1, maxOutputTokens: 1500 }, // giữ nguyên cấu hình cũ (OpenAI max_tokens: 1500)
+      });
       const text = result.response.text() ?? '[]';
       // Gemini hoạt động lại → reset trạng thái degraded
       query(`INSERT INTO settings (key, value, description) VALUES ('analyzer_status','ok','Trạng thái deal analyzer')

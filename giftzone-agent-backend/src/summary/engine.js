@@ -84,7 +84,10 @@ Cuộc trò chuyện:\n${conversation.slice(0, 8000)}`
 
 Cuộc trò chuyện:\n${conversation.slice(0, 8000)}`; // Limit để không vượt context
 
-  const result = await model.generateContent(prompt);
+  const result = await model.generateContent({
+    contents: [{ role: 'user', parts: [{ text: prompt }] }],
+    generationConfig: { temperature: 0.4, maxOutputTokens: 1200 }, // prompt yêu cầu "dưới 300 từ"
+  });
   return result.response.text();
 }
 
