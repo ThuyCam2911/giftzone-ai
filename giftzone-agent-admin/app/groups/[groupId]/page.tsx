@@ -5,7 +5,7 @@ import Sidebar from '@/components/Sidebar';
 import { getGroupDetail } from '@/lib/queries/group-detail';
 import { ISSUE_LABELS } from '@/lib/queries/deals';
 import { timeAgo } from '@/lib/utils';
-import { ArrowLeft, MessageSquare, Bot, AlertTriangle, Users } from 'lucide-react';
+import { ArrowLeft, MessageSquare, Bot, AlertTriangle, Users, Sparkles, Webhook } from 'lucide-react';
 
 const SEV: Record<string, { bg: string; color: string; label: string }> = {
   critical: { bg: '#fef2f2', color: '#b91c1c', label: 'Khẩn cấp' },
@@ -44,6 +44,26 @@ export default async function GroupDetailPage({ params }: { params: Promise<{ gr
         </div>
 
         <div className="px-4 pb-8 md:px-8 pt-6 space-y-6 max-w-3xl">
+
+          {/* ── Demo banner ── */}
+          {groupId.startsWith('demo-') && (
+            <div className="rounded-xl border px-4 py-3 flex items-start gap-3"
+              style={{ background: '#e6f9f1', borderColor: '#02AD64' }}>
+              <Webhook size={16} className="text-[#018a4e] mt-0.5 shrink-0" />
+              <div className="flex-1">
+                <p className="text-sm font-semibold" style={{ color: '#018a4e' }}>
+                  Đây là dữ liệu vừa được đồng bộ qua Webhook từ hội thoại minh họa zEnterprise
+                </p>
+                <p className="text-xs mt-0.5" style={{ color: '#018a4e' }}>
+                  Tin nhắn, KPI và phân tích AI bên dưới được ghi trực tiếp vào cùng hệ thống dữ liệu production — không phải màn hình dựng riêng cho demo.
+                </p>
+              </div>
+              <Link href="/demo" className="flex items-center gap-1 text-xs font-medium shrink-0 px-2.5 py-1.5 rounded-lg bg-white"
+                style={{ color: '#018a4e' }}>
+                <Sparkles size={12} /> Demo mới
+              </Link>
+            </div>
+          )}
 
           {/* ── KPI row ── */}
           <div className="grid grid-cols-3 gap-3">

@@ -14,9 +14,16 @@ import {
   LogOut,
   Menu,
   X,
+  Sparkles,
 } from 'lucide-react';
 
 const navGroups = [
+  {
+    label: 'Demo',
+    items: [
+      { href: '/demo', label: 'Demo trực tiếp', icon: Sparkles },
+    ],
+  },
   {
     label: 'Tổng quan',
     items: [
@@ -78,17 +85,8 @@ function NavItems({ pathname, onClose }: { pathname: string; onClose?: () => voi
   );
 }
 
-export default function Sidebar() {
-  const pathname = usePathname();
-  const router   = useRouter();
-  const [open, setOpen] = useState(false);
-
-  async function logout() {
-    await fetch('/api/auth', { method: 'DELETE' });
-    router.push('/login');
-  }
-
-  const Logo = () => (
+function Logo() {
+  return (
     <div className="flex items-center gap-2.5">
       <div className="w-8 h-8 rounded-lg overflow-hidden flex items-center justify-center shrink-0"
         style={{ background: 'rgba(255,255,255,0.95)' }}>
@@ -100,6 +98,17 @@ export default function Sidebar() {
       </div>
     </div>
   );
+}
+
+export default function Sidebar() {
+  const pathname = usePathname();
+  const router   = useRouter();
+  const [open, setOpen] = useState(false);
+
+  async function logout() {
+    await fetch('/api/auth', { method: 'DELETE' });
+    router.push('/login');
+  }
 
   return (
     <>
