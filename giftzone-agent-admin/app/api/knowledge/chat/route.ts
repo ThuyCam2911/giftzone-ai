@@ -55,7 +55,10 @@ export async function POST(req: NextRequest) {
 
   const prompt = `${SYSTEM_PROMPT}\n\nTài liệu tham khảo:\n\n${context}\n\n---\n\nCâu hỏi: ${question}`;
 
-  const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
+  const model = genAI.getGenerativeModel({
+    model: 'gemini-2.5-flash-lite',
+    generationConfig: { temperature: 0.3, maxOutputTokens: 600 },
+  });
   const result = await model.generateContent(prompt);
   const answer = result.response.text();
   const sources = [...new Set(chunks.map(c => c.file_name))];
