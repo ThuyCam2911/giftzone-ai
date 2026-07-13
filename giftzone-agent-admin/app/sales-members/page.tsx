@@ -2,9 +2,9 @@ export const dynamic = 'force-dynamic';
 
 import Sidebar from '@/components/Sidebar';
 import { getSalesMembersData } from '@/lib/queries/sales-members';
+import { getDict } from '@/lib/i18n/server';
 import { Users, Clock, MessageSquare, AlertTriangle } from 'lucide-react';
 
-const ROLE_LABEL: Record<string, string> = { sales: 'Sales', cs: 'CS', manager: 'Manager', technical: 'Tech' };
 const ROLE_STYLE: Record<string, { bg: string; color: string }> = {
   sales:     { bg: '#e6f9f1', color: '#018a4e' },
   cs:        { bg: '#eef2ff', color: '#4338ca' },
@@ -12,14 +12,20 @@ const ROLE_STYLE: Record<string, { bg: string; color: string }> = {
   technical: { bg: '#f0fdf4', color: '#166534' },
 };
 
-function formatResponseTime(min: number | null) {
-  if (min === null) return '—';
-  if (min < 1) return '< 1 phút';
-  if (min < 60) return `${min} phút`;
-  return `${Math.round(min / 60)} giờ`;
-}
-
 export default async function SalesMembersPage() {
+  const { t } = await getDict();
+
+  const ROLE_LABEL: Record<string, string> = {
+    sales: t('ze.accounts.roleSales'), cs: t('ze.accounts.roleCS'),
+    manager: t('ze.accounts.roleManager'), technical: t('ze.accounts.roleTechnical'),
+  };
+  function formatResponseTime(min: number | null) {
+    if (min === null) return '—';
+    if (min < 1) return t('salesMembers.lessThanMin');
+    if (min < 60) return `${min} ${t('common.minutes')}`;
+    return `${Math.round(min / 60)} ${t('common.hours')}`;
+  }
+
   let members;
   try {
     members = await getSalesMembersData();
@@ -30,7 +36,7 @@ export default async function SalesMembersPage() {
         <Sidebar />
         <main className="flex-1 p-4 pt-18 md:pt-8 md:p-8">
           <div className="bg-red-50 border border-red-200 rounded-xl p-6 text-red-800">
-            <p className="font-medium">Không kết nối được database.</p>
+            <p className="font-medium">{t('common.dbError')}</p>
             <p className="text-sm mt-2 font-mono break-all">{msg}</p>
           </div>
         </main>
@@ -47,17 +53,17 @@ export default async function SalesMembersPage() {
       <Sidebar />
       <main className="flex-1 overflow-auto min-w-0">
         <div className="sticky top-0 z-10 bg-gray-50/90 backdrop-blur border-b border-gray-200 px-4 pt-18 pb-3 md:pt-4 md:px-8 md:pb-4">
-          <h1 className="text-lg font-bold text-gray-900">Nhân viên Sales</h1>
-          <p className="text-xs text-gray-500 mt-0.5">KPI theo từng nhân viên · 30 ngày gần nhất</p>
+          <h1 className="text-lg font-bold text-gray-900">{t('salesMembers.title')}</h1>
+          <p className="text-xs text-gray-500 mt-0.5">{t('salesMembers.subtitle')}</p>
         </div>
 
         <div className="px-4 pb-8 md:px-8 pt-6 max-w-4xl space-y-6">
           {/* KPI summary */}
           <div className="grid grid-cols-3 gap-4">
             {[
-              { label: 'Nhân viên',       value: members.length, Icon: Users,          color: '#02AD64', bg: '#e6f9f1' },
-              { label: 'Tin nhắn / 30ng', value: totalMsgs,      Icon: MessageSquare,  color: '#6366f1', bg: '#eef2ff' },
-              { label: 'Issues đang mở',  value: totalIssues,    Icon: AlertTriangle,  color: '#FF6900', bg: '#fff3eb' },
+              { label: t('salesMembers.statMembers'),       value: members.length, Icon: Users,          color: '#02AD64', bg: '#e6f9f1' },
+              { label: t('salesMembers.statMessages30d'),   value: totalMsgs,      Icon: MessageSquare,  color: '#6366f1', bg: '#eef2ff' },
+              { label: t('salesMembers.statOpenIssues'),    value: totalIssues,    Icon: AlertTriangle,  color: '#FF6900', bg: '#fff3eb' },
             ].map(card => (
               <div key={card.label} className="bg-white rounded-xl border border-gray-200 p-4">
                 <div className="flex items-center justify-between mb-3">
@@ -75,14 +81,14 @@ export default async function SalesMembersPage() {
           <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
             <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-2">
               <Users size={13} className="text-gray-400" />
-              <span className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Chi tiết theo nhân viên</span>
+              <span className="text-xs font-semibold text-gray-600 uppercase tracking-wide">{t('salesMembers.detailTitle')}</span>
             </div>
 
             {members.length === 0 ? (
               <div className="py-14 text-center px-4">
-                <p className="text-sm text-gray-400">Chưa có nhân viên nào trong danh sách GZ Members.</p>
+                <p className="text-sm text-gray-400">{t('salesMembers.emptyTitle')}</p>
                 <p className="text-xs text-gray-400 mt-1">
-                  Vào <a href="/groups" className="underline" style={{ color: '#018a4e' }}>Quản lý nhóm</a> để thêm thành viên.
+                  <a href="/groups" className="underline" style={{ color: '#018a4e' }}>{t('salesMembers.emptyLink')}</a> {t('salesMembers.emptyBody')}
                 </p>
               </div>
             ) : (
@@ -91,13 +97,13 @@ export default async function SalesMembersPage() {
                   <table className="w-full text-sm min-w-[600px]">
                     <thead className="bg-gray-50 border-b border-gray-100">
                       <tr>
-                        <th className="text-left px-4 py-3 text-xs font-medium text-gray-400 uppercase">Tên</th>
-                        <th className="text-left px-4 py-3 text-xs font-medium text-gray-400 uppercase">Role</th>
-                        <th className="text-right px-4 py-3 text-xs font-medium text-gray-400 uppercase">Tin nhắn</th>
-                        <th className="text-right px-4 py-3 text-xs font-medium text-gray-400 uppercase">Nhóm</th>
-                        <th className="text-right px-4 py-3 text-xs font-medium text-gray-400 uppercase">Issues mở</th>
+                        <th className="text-left px-4 py-3 text-xs font-medium text-gray-400 uppercase">{t('salesMembers.colName')}</th>
+                        <th className="text-left px-4 py-3 text-xs font-medium text-gray-400 uppercase">{t('salesMembers.colRole')}</th>
+                        <th className="text-right px-4 py-3 text-xs font-medium text-gray-400 uppercase">{t('salesMembers.colMessages')}</th>
+                        <th className="text-right px-4 py-3 text-xs font-medium text-gray-400 uppercase">{t('salesMembers.colGroups')}</th>
+                        <th className="text-right px-4 py-3 text-xs font-medium text-gray-400 uppercase">{t('salesMembers.colOpenIssues')}</th>
                         <th className="text-right px-4 py-3 text-xs font-medium text-gray-400 uppercase flex items-center justify-end gap-1">
-                          <Clock size={10} /> TB phản hồi
+                          <Clock size={10} /> {t('salesMembers.colAvgResponse')}
                         </th>
                       </tr>
                     </thead>
@@ -140,7 +146,7 @@ export default async function SalesMembersPage() {
                 {!hasRtData && (
                   <div className="px-4 py-3 border-t border-gray-50 bg-amber-50">
                     <p className="text-xs text-amber-700">
-                      Dữ liệu thời gian phản hồi chưa có — sẽ tích lũy sau khi agent hoạt động vài ngày.
+                      {t('salesMembers.noResponseData')}
                     </p>
                   </div>
                 )}

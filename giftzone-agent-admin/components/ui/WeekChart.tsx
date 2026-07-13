@@ -1,16 +1,18 @@
 'use client';
 import { useState } from 'react';
+import { useLocale } from '@/components/LocaleProvider';
 
 interface DayData { label: string; count: number }
 
 export default function WeekChart({ days }: { days: DayData[] }) {
+  const { t } = useLocale();
   const [hovered, setHovered] = useState<number | null>(null);
   const max = Math.max(...days.map(d => d.count), 1);
 
   return (
     <div className="bg-white rounded-2xl p-5" style={{ boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
-      <p className="text-sm font-semibold mb-1" style={{ color: '#111827' }}>Hội thoại AI — 7 ngày qua</p>
-      <p className="text-xs mb-4" style={{ color: '#9ca3af' }}>Số câu hỏi được xử lý mỗi ngày</p>
+      <p className="text-sm font-semibold mb-1" style={{ color: '#111827' }}>{t('weekChart.title')}</p>
+      <p className="text-xs mb-4" style={{ color: '#9ca3af' }}>{t('weekChart.subtitle')}</p>
 
       <div className="flex items-end gap-2" style={{ height: 120 }}>
         {days.map((d, i) => {
@@ -36,7 +38,7 @@ export default function WeekChart({ days }: { days: DayData[] }) {
                 {isHovered && d.count > 0 && (
                   <div className="text-white text-[11px] font-bold px-2 py-0.5 rounded-full"
                     style={{ background: barColor, whiteSpace: 'nowrap' }}>
-                    {d.count} câu hỏi
+                    {d.count} {t('weekChart.questions')}
                   </div>
                 )}
                 {!isHovered && (
@@ -77,11 +79,11 @@ export default function WeekChart({ days }: { days: DayData[] }) {
       <div className="flex gap-4 mt-3">
         <div className="flex items-center gap-1.5">
           <div className="w-2.5 h-2.5 rounded-sm" style={{ background: '#02AD64' }} />
-          <span className="text-[10px]" style={{ color: '#9ca3af' }}>Các ngày</span>
+          <span className="text-[10px]" style={{ color: '#9ca3af' }}>{t('weekChart.legendDays')}</span>
         </div>
         <div className="flex items-center gap-1.5">
           <div className="w-2.5 h-2.5 rounded-sm" style={{ background: '#FF6900' }} />
-          <span className="text-[10px]" style={{ color: '#9ca3af' }}>Hôm nay</span>
+          <span className="text-[10px]" style={{ color: '#9ca3af' }}>{t('weekChart.legendToday')}</span>
         </div>
       </div>
     </div>

@@ -1,5 +1,6 @@
 'use client';
 import { useState } from 'react';
+import { useLocale } from '@/components/LocaleProvider';
 
 interface GroupRow {
   group_id: string;
@@ -8,15 +9,16 @@ interface GroupRow {
   updated_at: string;
 }
 
-const TYPE_CONFIG = {
-  customer: { label: 'Khách hàng', bg: '#f0fdf4', color: '#166534', desc: 'Nhóm tư vấn khách — AI phân tích chất lượng' },
-  internal: { label: 'Nội bộ',     bg: '#eff6ff', color: '#1d4ed8', desc: 'Nhóm nội bộ — bỏ qua khi phân tích' },
-  unknown:  { label: 'Chưa phân loại', bg: '#f9fafb', color: '#6b7280', desc: '' },
-};
-
 export default function GroupTypeManager({ groups: initial }: { groups: GroupRow[] }) {
+  const { t } = useLocale();
   const [groups, setGroups] = useState(initial);
   const [saving, setSaving] = useState<string | null>(null);
+
+  const TYPE_CONFIG = {
+    customer: { label: t('groups.typeCustomer'), bg: '#f0fdf4', color: '#166534', desc: t('groups.typeCustomerDesc') },
+    internal: { label: t('groups.typeInternal'), bg: '#eff6ff', color: '#1d4ed8', desc: t('groups.typeInternalDesc') },
+    unknown:  { label: t('groups.typeUnknown'),  bg: '#f9fafb', color: '#6b7280', desc: '' },
+  };
 
   async function setType(groupId: string, type: string) {
     setSaving(groupId);
@@ -32,7 +34,7 @@ export default function GroupTypeManager({ groups: initial }: { groups: GroupRow
   if (groups.length === 0) {
     return (
       <p className="text-xs text-gray-400 py-4">
-        Chưa có nhóm nào — sẽ tự động xuất hiện sau khi agent nhận tin nhắn từ các nhóm.
+        {t('groups.noGroups')}
       </p>
     );
   }
@@ -48,13 +50,13 @@ export default function GroupTypeManager({ groups: initial }: { groups: GroupRow
               <p className="text-xs text-gray-400 font-mono mt-0.5">···{g.group_id.slice(-10)}</p>
             </div>
             <div className="flex items-center gap-2 shrink-0">
-              {(['customer', 'internal', 'unknown'] as const).map(t => {
-                const c = TYPE_CONFIG[t];
-                const active = g.group_type === t;
+              {(['customer', 'internal', 'unknown'] as const).map(ty => {
+                const c = TYPE_CONFIG[ty];
+                const active = g.group_type === ty;
                 return (
                   <button
-                    key={t}
-                    onClick={() => !active && setType(g.group_id, t)}
+                    key={ty}
+                    onClick={() => !active && setType(g.group_id, ty)}
                     disabled={saving === g.group_id}
                     className="text-xs font-medium px-3 py-1.5 rounded-lg border transition-all disabled:opacity-50"
                     style={active

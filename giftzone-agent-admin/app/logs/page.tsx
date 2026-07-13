@@ -2,23 +2,26 @@ export const dynamic = 'force-dynamic';
 
 import Sidebar from '@/components/Sidebar';
 import { getLogs } from '@/lib/queries/logs';
+import { getDict } from '@/lib/i18n/server';
 
 export default async function LogsPage({
   searchParams,
 }: {
   searchParams: Promise<{ page?: string }>;
 }) {
+  const { t, locale } = await getDict();
   const params = await searchParams;
   const page   = Number(params.page ?? 1);
   const { rows, total, totalPages } = await getLogs(page);
+  const dateLocale = locale === 'en' ? 'en-US' : 'vi-VN';
 
   return (
     <div className="flex min-h-screen bg-gray-50">
       <Sidebar />
       <main className="flex-1 overflow-auto min-w-0">
         <div className="sticky top-0 z-10 bg-gray-50/90 backdrop-blur border-b border-gray-200 px-4 pt-18 pb-3 md:pt-4 md:px-8 md:pb-4">
-          <h1 className="text-lg font-bold text-gray-900">AI Logs</h1>
-          <p className="text-xs text-gray-500 mt-0.5">{total} tổng số câu hỏi</p>
+          <h1 className="text-lg font-bold text-gray-900">{t('logs.title')}</h1>
+          <p className="text-xs text-gray-500 mt-0.5">{total} {t('logs.totalQuestions')}</p>
         </div>
 
         <div className="px-4 pb-8 md:px-8 pt-6">
@@ -27,28 +30,28 @@ export default async function LogsPage({
               <table className="w-full text-sm">
                 <thead className="bg-gray-50 border-b border-gray-200">
                   <tr>
-                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Thời gian</th>
-                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Nhóm</th>
-                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Câu hỏi</th>
-                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Nguồn</th>
-                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Latency</th>
+                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">{t('logs.time')}</th>
+                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">{t('logs.group')}</th>
+                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">{t('logs.question')}</th>
+                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">{t('logs.source')}</th>
+                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">{t('logs.latency')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {rows.length === 0 && (
                     <tr>
-                      <td colSpan={5} className="text-center py-10 text-gray-400">Chưa có dữ liệu</td>
+                      <td colSpan={5} className="text-center py-10 text-gray-400">{t('logs.noData')}</td>
                     </tr>
                   )}
                   {rows.map(row => (
                     <tr key={row.id} className="hover:bg-gray-50">
                       <td className="px-4 py-3 text-gray-500 whitespace-nowrap text-xs">
-                        {new Date(row.created_at).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })}
+                        {new Date(row.created_at).toLocaleString(dateLocale, { timeZone: 'Asia/Ho_Chi_Minh' })}
                       </td>
                       <td className="px-4 py-3 text-xs">
                         {row.group_name
                           ? <span className="text-gray-800 font-medium">{row.group_name}</span>
-                          : <span className="text-gray-400 italic">1:1 chat</span>}
+                          : <span className="text-gray-400 italic">{t('logs.directChat')}</span>}
                       </td>
                       <td className="px-4 py-3 text-gray-900 max-w-xs truncate">{row.query}</td>
                       <td className="px-4 py-3 text-gray-500 text-xs">

@@ -7,6 +7,7 @@ import {
   MessageSquare, Zap, TrendingUp, FileText, Flame, HelpCircle,
   AlertCircle, Clock, type LucideIcon,
 } from 'lucide-react';
+import { useLocale } from '@/components/LocaleProvider';
 
 interface ResponseTimeRow {
   sender_uid: string;
@@ -28,12 +29,6 @@ interface Props {
   responseTimes: ResponseTimeRow[];
 }
 
-function sanitizeQuery(q: string) {
-  if (q.startsWith('{') || q.startsWith('[')) return '[Sticker / file đính kèm]';
-  return q.length > 100 ? q.slice(0, 100) + '…' : q;
-}
-
-const ROLE_LABEL: Record<string, string> = { sales: 'Sales', cs: 'CS', manager: 'Manager', technical: 'Tech' };
 const ROLE_COLOR: Record<string, { bg: string; color: string }> = {
   sales:     { bg: '#e6f9f1', color: '#018a4e' },
   cs:        { bg: '#eef2ff', color: '#4338ca' },
@@ -41,17 +36,28 @@ const ROLE_COLOR: Record<string, { bg: string; color: string }> = {
   technical: { bg: '#f0fdf4', color: '#166534' },
 };
 
-function formatResponseTime(min: number | null) {
-  if (min === null) return '—';
-  if (min < 1) return '< 1 phút';
-  if (min < 60) return `${min} phút`;
-  return `${Math.round(min / 60)} giờ`;
-}
-
 export default function AnalyticsPage({
   topQuestions, groupUsage, docUsage, latency, days7, unanswered, unansweredTotal, responseTimes,
 }: Props) {
+  const { t } = useLocale();
   const [tab, setTab] = useState<'top' | 'unanswered'>('top');
+
+  const ROLE_LABEL: Record<string, string> = {
+    sales: t('ze.accounts.roleSales'), cs: t('ze.accounts.roleCS'),
+    manager: t('ze.accounts.roleManager'), technical: t('ze.accounts.roleTechnical'),
+  };
+
+  function sanitizeQuery(q: string) {
+    if (q.startsWith('{') || q.startsWith('[')) return t('analytics.attachment');
+    return q.length > 100 ? q.slice(0, 100) + '…' : q;
+  }
+
+  function formatResponseTime(min: number | null) {
+    if (min === null) return '—';
+    if (min < 1) return t('salesMembers.lessThanMin');
+    if (min < 60) return `${min} ${t('common.minutes')}`;
+    return `${Math.round(min / 60)} ${t('common.hours')}`;
+  }
 
   const totalWeek = days7.reduce((s, d) => s + d.count, 0);
   const uniqueDocs = docUsage.length;
@@ -66,10 +72,10 @@ export default function AnalyticsPage({
       {/* ── KPI cards ── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         {([
-          { label: 'Câu hỏi / 7 ngày',  value: totalWeek,              Icon: MessageSquare, color: '#02AD64', bg: '#e6f9f1' },
-          { label: 'Latency p50',        value: `${latency.p50}ms`,     Icon: Zap,           color: '#6366f1', bg: '#eef2ff' },
-          { label: 'Latency p95',        value: `${latency.p95}ms`,     Icon: TrendingUp,    color: '#FF6900', bg: '#fff3eb' },
-          { label: 'Tài liệu được dùng', value: uniqueDocs,             Icon: FileText,      color: '#0ea5e9', bg: '#e0f2fe' },
+          { label: t('analytics.questionsPer7d'), value: totalWeek,          Icon: MessageSquare, color: '#02AD64', bg: '#e6f9f1' },
+          { label: 'Latency p50',                  value: `${latency.p50}ms`, Icon: Zap,           color: '#6366f1', bg: '#eef2ff' },
+          { label: 'Latency p95',                  value: `${latency.p95}ms`, Icon: TrendingUp,    color: '#FF6900', bg: '#fff3eb' },
+          { label: t('analytics.docsUsed'),        value: uniqueDocs,         Icon: FileText,      color: '#0ea5e9', bg: '#e0f2fe' },
         ] as { label: string; value: string | number; Icon: LucideIcon; color: string; bg: string }[]).map(card => (
           <div key={card.label} className="bg-white rounded-xl border border-gray-200 p-4">
             <div className="flex items-center justify-between mb-3">
@@ -86,16 +92,16 @@ export default function AnalyticsPage({
       {/* ── Quality score banner ── */}
       <div className="bg-white rounded-xl border border-gray-200 px-5 py-4 mb-6 flex items-center justify-between gap-4">
         <div>
-          <p className="text-sm font-semibold text-gray-800">Chất lượng phản hồi AI</p>
+          <p className="text-sm font-semibold text-gray-800">{t('analytics.qualityTitle')}</p>
           <p className="text-xs text-gray-400 mt-0.5">
-            {latency.total - unansweredTotal} / {latency.total} câu hỏi được trả lời đầy đủ trong 7 ngày qua
+            {latency.total - unansweredTotal} / {latency.total} {t('analytics.qualitySub')}
           </p>
         </div>
         <div className="shrink-0 text-center">
           <p className="text-3xl font-bold" style={{ color: qualityColor }}>{qualityPct}%</p>
           <p className="text-[10px] mt-0.5 px-2 py-0.5 rounded-full font-medium"
             style={{ background: qualityBg, color: qualityColor }}>
-            {qualityPct >= 80 ? 'Tốt' : qualityPct >= 60 ? 'Cần cải thiện' : 'Kém'}
+            {qualityPct >= 80 ? t('analytics.qualityGood') : qualityPct >= 60 ? t('analytics.qualityImprove') : t('analytics.qualityBad')}
           </p>
         </div>
       </div>
@@ -108,19 +114,19 @@ export default function AnalyticsPage({
       {/* ── Questions tab ── */}
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden mb-6">
         <div className="flex items-center gap-0 border-b border-gray-200">
-          {(['top', 'unanswered'] as const).map(t => (
+          {(['top', 'unanswered'] as const).map(tb => (
             <button
-              key={t}
-              onClick={() => setTab(t)}
+              key={tb}
+              onClick={() => setTab(tb)}
               className="px-5 py-3 text-sm font-medium transition-colors"
-              style={tab === t
+              style={tab === tb
                 ? { color: '#02AD64', borderBottom: '2px solid #02AD64', background: '#f9fafb' }
                 : { color: '#6b7280', borderBottom: '2px solid transparent' }}
             >
-              {t === 'top'
-                ? <span className="flex items-center gap-1.5"><Flame size={13} />Hay hỏi nhất</span>
+              {tb === 'top'
+                ? <span className="flex items-center gap-1.5"><Flame size={13} />{t('analytics.tabTop')}</span>
                 : <span className="flex items-center gap-1.5">
-                    <HelpCircle size={13} />AI chưa biết
+                    <HelpCircle size={13} />{t('analytics.tabUnanswered')}
                     {unansweredTotal > 0 && (
                       <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold"
                         style={{ background: '#fef2f2', color: '#b91c1c' }}>{unansweredTotal}</span>
@@ -130,12 +136,12 @@ export default function AnalyticsPage({
             </button>
           ))}
           <span className="ml-auto mr-4 text-xs text-gray-400">
-            {tab === 'top' ? `${topQuestions.length} câu` : `${unanswered.length} câu`}
+            {tab === 'top' ? topQuestions.length : unanswered.length} {t('analytics.questionsUnit')}
           </span>
         </div>
 
         {tab === 'top' && (
-          <QuestionList items={topQuestions} emptyText="Chưa có dữ liệu — agent sẽ tổng hợp khi Sales bắt đầu hỏi." />
+          <QuestionList items={topQuestions} emptyText={t('analytics.noDataTop')} sanitizeQuery={sanitizeQuery} />
         )}
         {tab === 'unanswered' && (
           <>
@@ -144,15 +150,15 @@ export default function AnalyticsPage({
                 <AlertCircle size={14} className="text-amber-500 mt-0.5 shrink-0" />
                 <div className="flex-1">
                   <p className="text-xs font-medium text-amber-800">
-                    AI chưa có thông tin để trả lời {unansweredTotal} câu hỏi này
+                    {t('analytics.unansweredBannerTitle')} ({unansweredTotal})
                   </p>
                   <p className="text-xs text-amber-600 mt-0.5">
-                    Thêm tài liệu liên quan vào Google Drive để cải thiện chất lượng phản hồi.
+                    {t('analytics.unansweredBannerBody')}
                   </p>
                 </div>
               </div>
             )}
-            <QuestionList items={unanswered} emptyText="Không có câu hỏi nào ngoài tầm hiểu biết — tốt lắm!" />
+            <QuestionList items={unanswered} emptyText={t('analytics.noDataUnanswered')} sanitizeQuery={sanitizeQuery} />
           </>
         )}
       </div>
@@ -162,17 +168,17 @@ export default function AnalyticsPage({
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden mb-6">
           <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-2">
             <Clock size={13} className="text-gray-400" />
-            <span className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Thời gian phản hồi theo nhân viên (30 ngày)</span>
+            <span className="text-xs font-semibold text-gray-600 uppercase tracking-wide">{t('analytics.responseTimeTitle')}</span>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm min-w-[500px]">
               <thead className="bg-gray-50 border-b border-gray-100">
                 <tr>
-                  <th className="text-left px-4 py-2.5 text-xs font-medium text-gray-400 uppercase">Nhân viên</th>
-                  <th className="text-left px-4 py-2.5 text-xs font-medium text-gray-400 uppercase">Role</th>
-                  <th className="text-right px-4 py-2.5 text-xs font-medium text-gray-400 uppercase">Tin nhắn</th>
-                  <th className="text-right px-4 py-2.5 text-xs font-medium text-gray-400 uppercase">Nhóm</th>
-                  <th className="text-right px-4 py-2.5 text-xs font-medium text-gray-400 uppercase">TB phản hồi</th>
+                  <th className="text-left px-4 py-2.5 text-xs font-medium text-gray-400 uppercase">{t('analytics.employee')}</th>
+                  <th className="text-left px-4 py-2.5 text-xs font-medium text-gray-400 uppercase">{t('common.role')}</th>
+                  <th className="text-right px-4 py-2.5 text-xs font-medium text-gray-400 uppercase">{t('common.messages')}</th>
+                  <th className="text-right px-4 py-2.5 text-xs font-medium text-gray-400 uppercase">{t('common.groups')}</th>
+                  <th className="text-right px-4 py-2.5 text-xs font-medium text-gray-400 uppercase">{t('analytics.avgResponse')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
@@ -203,7 +209,7 @@ export default function AnalyticsPage({
           </div>
           {responseTimes.every(r => r.avg_response_min === null) && (
             <p className="text-xs text-gray-400 text-center py-3 border-t border-gray-50">
-              Dữ liệu thời gian phản hồi sẽ tích lũy sau vài ngày agent hoạt động.
+              {t('analytics.responseTimeNoData')}
             </p>
           )}
         </div>
@@ -214,10 +220,10 @@ export default function AnalyticsPage({
         {/* Group usage */}
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
           <div className="px-4 py-3 border-b border-gray-100">
-            <span className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Nhóm dùng AI nhiều</span>
+            <span className="text-xs font-semibold text-gray-600 uppercase tracking-wide">{t('analytics.groupUsageTitle')}</span>
           </div>
           {groupUsage.length === 0 ? (
-            <p className="text-xs text-gray-400 text-center py-8">Chưa có dữ liệu.</p>
+            <p className="text-xs text-gray-400 text-center py-8">{t('common.noData')}</p>
           ) : (
             <ul className="divide-y divide-gray-50">
               {groupUsage.map(g => (
@@ -248,10 +254,10 @@ export default function AnalyticsPage({
         {/* Doc usage */}
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
           <div className="px-4 py-3 border-b border-gray-100">
-            <span className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Tài liệu được tham chiếu</span>
+            <span className="text-xs font-semibold text-gray-600 uppercase tracking-wide">{t('analytics.docUsageTitle')}</span>
           </div>
           {docUsage.length === 0 ? (
-            <p className="text-xs text-gray-400 text-center py-8">Chưa có câu hỏi nào được trả lời từ tài liệu.</p>
+            <p className="text-xs text-gray-400 text-center py-8">{t('analytics.docUsageEmpty')}</p>
           ) : (
             <ul className="divide-y divide-gray-50">
               {docUsage.map(d => (
@@ -276,7 +282,9 @@ export default function AnalyticsPage({
   );
 }
 
-function QuestionList({ items, emptyText }: { items: { question: string; cnt: number }[]; emptyText: string }) {
+function QuestionList({ items, emptyText, sanitizeQuery }: {
+  items: { question: string; cnt: number }[]; emptyText: string; sanitizeQuery: (q: string) => string;
+}) {
   if (items.length === 0) {
     return <p className="text-xs text-gray-400 text-center py-8 px-4">{emptyText}</p>;
   }

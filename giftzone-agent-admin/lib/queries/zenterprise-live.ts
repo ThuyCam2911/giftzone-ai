@@ -1,12 +1,12 @@
 import { query } from '@/lib/db';
 
-export interface DemoMessageInput {
-  senderId: string;      // 'demo-customer' | 'demo-employee-a' | 'demo-employee-b'
+export interface LiveMessageInput {
+  senderId: string;      // 'live-customer' | 'live-employee-a' | 'live-employee-b'
   senderName: string;
   text: string;
 }
 
-export interface DemoAnalysis {
+export interface LiveAnalysis {
   summary: string;
   sentiment: 'positive' | 'neutral' | 'negative';
   category: string;
@@ -18,15 +18,15 @@ export interface DemoAnalysis {
 }
 
 /**
- * Ghi 1 phiên demo zEnterprise vào đúng các bảng production (group_names, messages,
+ * Ghi 1 phiên zEnterprise Live vào đúng các bảng production (group_names, messages,
  * ai_logs, sales_issues) — để trang /groups/[groupId] có sẵn hiển thị y hệt dữ liệu thật,
- * không phải màn hình giả lập riêng.
+ * không phải màn hình dựng riêng.
  */
-export async function insertDemoConversation(params: {
+export async function insertLiveConversation(params: {
   groupId: string;
   groupName: string;
-  messages: DemoMessageInput[];
-  analysis: DemoAnalysis;
+  messages: LiveMessageInput[];
+  analysis: LiveAnalysis;
   latencyMs: number;
 }): Promise<void> {
   const { groupId, groupName, messages, analysis, latencyMs } = params;
@@ -42,7 +42,7 @@ export async function insertDemoConversation(params: {
   const n = messages.length;
   for (let i = 0; i < n; i++) {
     const m = messages[i];
-    const isEmployee = m.senderId.startsWith('demo-employee');
+    const isEmployee = m.senderId.startsWith('live-employee');
     const msgTs = new Date(base - (n - i) * 20_000).toISOString();
     await query(
       `INSERT INTO messages (group_id, sender_uid, sender_name, content, msg_ts, is_gz_member, msg_type)
@@ -58,19 +58,19 @@ export async function insertDemoConversation(params: {
 
   await query(
     `INSERT INTO ai_logs (group_id, sender_uid, query, answer, sources, latency_ms, is_answered, top_score)
-     VALUES ($1, 'demo-analyzer', $2, $3, '[]'::jsonb, $4, true, 1)`,
+     VALUES ($1, 'ze-live-analyzer', $2, $3, '[]'::jsonb, $4, true, 1)`,
     [groupId, `[Phân tích tự động] ${groupName}`, answer, latencyMs],
   );
 
   if (analysis.has_issue && analysis.issue_type) {
-    const lastCustomerMsg = [...messages].reverse().find(m => m.senderId === 'demo-customer');
+    const lastCustomerMsg = [...messages].reverse().find(m => m.senderId === 'live-customer');
     await query(
       `INSERT INTO sales_issues (group_id, issue_key, issue_type, severity, title, description, evidence, status)
        VALUES ($1, $2, $3, $4, $5, $6, $7, 'open')
        ON CONFLICT (issue_key) DO NOTHING`,
       [
         groupId,
-        `demo-${groupId}`,
+        `ze-live-${groupId}`,
         analysis.issue_type,
         analysis.issue_severity ?? 'medium',
         analysis.issue_title ?? analysis.summary.slice(0, 80),

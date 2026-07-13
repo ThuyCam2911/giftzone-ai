@@ -6,6 +6,7 @@ import SessionAlert from '@/components/SessionAlert';
 import DateRangeFilter from '@/components/DateRangeFilter';
 import { StatsCard, WeekChart } from '@/components/ui';
 import { getOverviewData } from '@/lib/queries/overview';
+import { getDict } from '@/lib/i18n/server';
 import { timeAgo, defaultDateRange } from '@/lib/utils';
 import { Users, MessageSquare, Bot, FileText } from 'lucide-react';
 
@@ -14,6 +15,7 @@ export default async function OverviewPage({
 }: {
   searchParams: Promise<{ from?: string; to?: string }>;
 }) {
+  const { t, locale } = await getDict();
   const params   = await searchParams;
   const defaults = defaultDateRange(6);
   const from     = params.from ?? defaults.from;
@@ -29,7 +31,7 @@ export default async function OverviewPage({
         <Sidebar />
         <main className="flex-1 p-4 pt-18 md:pt-8 md:p-8">
           <div className="bg-red-50 border border-red-200 rounded-xl p-6 text-red-800">
-            <p className="font-medium">Không kết nối được database.</p>
+            <p className="font-medium">{t('common.dbError')}</p>
             <p className="text-sm mt-2 font-mono break-all">{msg}</p>
           </div>
         </main>
@@ -37,7 +39,8 @@ export default async function OverviewPage({
     );
   }
 
-  const periodLabel = from === to ? 'hôm nay' : `${from} → ${to}`;
+  const periodLabel = from === to ? t('overview.periodToday') : `${from} → ${to}`;
+  const dateLocale = locale === 'en' ? 'en-US' : 'vi-VN';
 
   return (
     <div className="flex min-h-screen bg-gray-50">
@@ -46,7 +49,7 @@ export default async function OverviewPage({
         <div className="sticky top-0 z-10 bg-gray-50/90 backdrop-blur border-b border-gray-200 px-4 pt-18 pb-3 md:pt-4 md:px-8 md:pb-4">
           <div className="max-w-5xl mx-auto flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h1 className="text-lg font-bold text-gray-900">Tổng quan</h1>
+              <h1 className="text-lg font-bold text-gray-900">{t('overview.title')}</h1>
               <p className="text-xs text-gray-400 mt-0.5">
                 ● <span style={{ color: '#02AD64', fontWeight: 600 }}>{data.agentName}</span>
                 {' '}· {periodLabel}
@@ -64,25 +67,23 @@ export default async function OverviewPage({
 
             {data.analyzerStatus === 'degraded' && (
               <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-800">
-                ⚠️ <span className="font-medium">Deal Analyzer đang degraded</span> — toàn bộ
-                model chain OpenRouter bị rate limit. Issue mới sẽ không được phát hiện cho đến
-                khi quota hồi phục.
+                ⚠️ <span className="font-medium">{t('overview.analyzerDegradedTitle')}</span> {t('overview.analyzerDegradedBody')}
               </div>
             )}
 
             <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-              <StatsCard label="Nhóm có hội thoại" value={data.totalGroups}  icon={Users}         accent="green" />
-              <StatsCard label="Tin nhắn ghi nhận"  value={data.messages}    icon={MessageSquare}  accent="blue" />
+              <StatsCard label={t('overview.statGroups')} value={data.totalGroups}  icon={Users}         accent="green" />
+              <StatsCard label={t('overview.statMessages')} value={data.messages}    icon={MessageSquare}  accent="blue" />
               <StatsCard
-                label="Câu hỏi AI xử lý"
+                label={t('overview.statAiQueries')}
                 value={data.aiQueries}
-                sub={data.avgLatencyMs ? `Avg ${(data.avgLatencyMs / 1000).toFixed(1)}s` : undefined}
+                sub={data.avgLatencyMs ? `${t('overview.avg')} ${(data.avgLatencyMs / 1000).toFixed(1)}s` : undefined}
                 icon={Bot} accent="orange"
               />
               <StatsCard
-                label="Tài liệu đã học"
+                label={t('overview.statDocs')}
                 value={data.docChunks}
-                sub={data.lastIndexedAt ? `Cập nhật ${timeAgo(data.lastIndexedAt)}` : undefined}
+                sub={data.lastIndexedAt ? `${t('overview.updated')} ${timeAgo(data.lastIndexedAt)}` : undefined}
                 icon={FileText} accent="purple"
               />
             </div>
@@ -92,10 +93,10 @@ export default async function OverviewPage({
                 <WeekChart days={data.daysChart} />
               </div>
               <div className="bg-white rounded-2xl p-5" style={{ boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
-                <p className="text-sm font-semibold mb-4" style={{ color: '#111827' }}>Tình trạng agent</p>
+                <p className="text-sm font-semibold mb-4" style={{ color: '#111827' }}>{t('overview.agentStatus')}</p>
                 <ul className="space-y-3">
                   <li className="flex justify-between items-center gap-2">
-                    <span className="text-xs shrink-0" style={{ color: '#6b7280' }}>Kết nối Zalo</span>
+                    <span className="text-xs shrink-0" style={{ color: '#6b7280' }}>{t('overview.zaloConnection')}</span>
                     <span className="text-xs font-semibold px-2.5 py-1 rounded-full flex items-center gap-1 shrink-0" style={
                       data.sessionStatus === 'ok'      ? { background: '#e6f9f1', color: '#018a4e' }
                       : data.sessionStatus === 'warning' ? { background: '#fffbeb', color: '#92400e' }
@@ -103,29 +104,29 @@ export default async function OverviewPage({
                       : { background: '#f3f4f6', color: '#6b7280' }
                     }>
                       <span className={data.sessionStatus === 'ok' ? 'pulse-green' : ''}>●</span>
-                      {data.sessionStatus === 'ok'      ? 'Đang kết nối'
-                        : data.sessionStatus === 'warning' ? 'Cần kiểm tra'
-                        : data.sessionStatus === 'expired' ? 'Mất kết nối'
-                        : 'Chưa xác định'}
+                      {data.sessionStatus === 'ok'      ? t('overview.statusConnected')
+                        : data.sessionStatus === 'warning' ? t('overview.statusWarning')
+                        : data.sessionStatus === 'expired' ? t('overview.statusExpired')
+                        : t('overview.statusUnknown')}
                     </span>
                   </li>
                   <li className="flex justify-between items-center gap-2">
-                    <span className="text-xs shrink-0" style={{ color: '#6b7280' }}>Hoạt động lần cuối</span>
+                    <span className="text-xs shrink-0" style={{ color: '#6b7280' }}>{t('overview.lastActive')}</span>
                     <span className="text-xs font-medium text-right" style={{ color: '#374151' }}>{timeAgo(data.sessionLastSeen)}</span>
                   </li>
                   <li className="flex justify-between items-center gap-2">
-                    <span className="text-xs shrink-0" style={{ color: '#6b7280' }}>Cơ sở dữ liệu</span>
+                    <span className="text-xs shrink-0" style={{ color: '#6b7280' }}>{t('overview.database')}</span>
                     <span className="text-xs font-semibold px-2.5 py-1 rounded-full flex items-center gap-1 shrink-0"
                       style={{ background: '#e6f9f1', color: '#018a4e' }}>
-                      <span className="pulse-green">●</span> Đang kết nối
+                      <span className="pulse-green">●</span> {t('overview.statusConnected')}
                     </span>
                   </li>
                   <li className="flex justify-between items-center gap-2">
-                    <span className="text-xs shrink-0" style={{ color: '#6b7280' }}>Tài liệu đã học</span>
-                    <span className="text-xs font-medium" style={{ color: '#374151' }}>{data.docChunks} đoạn</span>
+                    <span className="text-xs shrink-0" style={{ color: '#6b7280' }}>{t('overview.docsLearned')}</span>
+                    <span className="text-xs font-medium" style={{ color: '#374151' }}>{data.docChunks} {t('overview.docsUnit')}</span>
                   </li>
                   <li className="flex justify-between items-center gap-2">
-                    <span className="text-xs shrink-0" style={{ color: '#6b7280' }}>Lần học gần nhất</span>
+                    <span className="text-xs shrink-0" style={{ color: '#6b7280' }}>{t('overview.lastLearned')}</span>
                     <span className="text-xs font-medium" style={{ color: '#374151' }}>{timeAgo(data.lastIndexedAt)}</span>
                   </li>
                 </ul>
@@ -134,16 +135,16 @@ export default async function OverviewPage({
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="bg-white rounded-2xl p-5 min-w-0" style={{ boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
-                <p className="text-sm font-semibold mb-1" style={{ color: '#111827' }}>Sales hay hỏi gì?</p>
-                <p className="text-xs mb-4" style={{ color: '#9ca3af' }}>Top 5 trong kỳ đã chọn</p>
+                <p className="text-sm font-semibold mb-1" style={{ color: '#111827' }}>{t('overview.topQuestionsTitle')}</p>
+                <p className="text-xs mb-4" style={{ color: '#9ca3af' }}>{t('overview.topQuestionsSub')}</p>
                 {data.topQuestions.length === 0
-                  ? <p className="text-xs" style={{ color: '#9ca3af' }}>Chưa có câu hỏi nào trong kỳ này.</p>
+                  ? <p className="text-xs" style={{ color: '#9ca3af' }}>{t('overview.noQuestionsInPeriod')}</p>
                   : (
                     <ul className="space-y-3">
                       {data.topQuestions.map((q, i) => {
                         const max = Number(data.topQuestions[0]?.count ?? 1);
                         const label = q.question.startsWith('{') || q.question.startsWith('[')
-                          ? '[Sticker / file đính kèm]'
+                          ? t('overview.attachment')
                           : q.question.slice(0, 80);
                         return (
                           <li key={i} className="space-y-1">
@@ -164,24 +165,24 @@ export default async function OverviewPage({
               </div>
 
               <div className="bg-white rounded-2xl p-5 min-w-0" style={{ boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
-                <p className="text-sm font-semibold mb-1" style={{ color: '#111827' }}>Câu hỏi gần nhất</p>
-                <p className="text-xs mb-4" style={{ color: '#9ca3af' }}>5 câu gần nhất trong kỳ</p>
+                <p className="text-sm font-semibold mb-1" style={{ color: '#111827' }}>{t('overview.recentQuestionsTitle')}</p>
+                <p className="text-xs mb-4" style={{ color: '#9ca3af' }}>{t('overview.recentQuestionsSub')}</p>
                 {data.recentQueries.length === 0
-                  ? <p className="text-xs" style={{ color: '#9ca3af' }}>Chưa có câu hỏi nào.</p>
+                  ? <p className="text-xs" style={{ color: '#9ca3af' }}>{t('overview.noQuestions')}</p>
                   : (
                     <ul className="space-y-0">
                       {data.recentQueries.map((r, i) => (
                         <li key={i} className="py-2.5 flex gap-3 items-start"
                           style={{ borderBottom: i < data.recentQueries.length - 1 ? '1px solid #f3f4f6' : 'none' }}>
                           <span className="text-[10px] shrink-0 mt-0.5 font-medium" style={{ color: '#02AD64' }}>
-                            {new Date(r.created_at).toLocaleString('vi-VN', {
+                            {new Date(r.created_at).toLocaleString(dateLocale, {
                               hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'numeric',
                               timeZone: 'Asia/Ho_Chi_Minh',
                             })}
                           </span>
                           <p className="text-xs flex-1 leading-snug min-w-0 break-words line-clamp-2" style={{ color: '#374151' }}>
                             {r.query.startsWith('{') || r.query.startsWith('[')
-                              ? '[Sticker / file đính kèm]'
+                              ? t('overview.attachment')
                               : r.query.slice(0, 120)}
                           </p>
                           <span className="text-[10px] shrink-0 px-1.5 py-0.5 rounded font-medium"

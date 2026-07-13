@@ -1,6 +1,7 @@
 import { query } from '@/lib/db';
 import { toRangeTimestamps, toVNDateString } from '@/lib/utils';
 import type { SalesIssue, GroupQualityRow, DealsStats } from '@/types';
+import type { Locale } from '@/lib/i18n/config';
 
 export const ISSUE_LABELS: Record<string, string> = {
   no_reply:             'Chưa phản hồi',
@@ -13,6 +14,22 @@ export const ISSUE_LABELS: Record<string, string> = {
   low_engagement:       'Trả lời qua loa',
   negative_sentiment:   'Cảm xúc tiêu cực',
 };
+
+export const ISSUE_LABELS_EN: Record<string, string> = {
+  no_reply:             'No reply',
+  slow_reply:           'Slow reply',
+  rude_behavior:        'Rude behavior',
+  customer_complaint:   'Customer complaint',
+  broken_promise:       'Broken promise',
+  missed_opportunity:   'Missed opportunity',
+  dropped_conversation: 'Dropped conversation',
+  low_engagement:       'Low engagement',
+  negative_sentiment:   'Negative sentiment',
+};
+
+export function getIssueLabels(locale: Locale): Record<string, string> {
+  return locale === 'en' ? ISSUE_LABELS_EN : ISSUE_LABELS;
+}
 
 export function calcScore(
   critical: number,
@@ -30,7 +47,8 @@ export interface DealsData {
   aiInsight: string | null;
 }
 
-export async function getDealsData(from: string, to: string): Promise<DealsData> {
+export async function getDealsData(from: string, to: string, locale: Locale = 'vi'): Promise<DealsData> {
+  const labels = getIssueLabels(locale);
   const { fromTs, toTs } = toRangeTimestamps(from, to);
   const todayStart = toVNDateString(new Date()) + 'T00:00:00+07:00';
 
@@ -133,14 +151,25 @@ export async function getDealsData(from: string, to: string): Promise<DealsData>
     const typeCounts: Record<string, number> = {};
     for (const i of openIssues) typeCounts[i.issue_type] = (typeCounts[i.issue_type] ?? 0) + 1;
     const topType = Object.entries(typeCounts).sort((a, b) => b[1] - a[1])[0];
-    if (criticalCount > 0)
-      insights.push(`Có ${criticalCount} issues mức độ high/critical đang mở — cần xử lý ngay.`);
-    if (topType)
-      insights.push(`Issue phổ biến nhất: "${ISSUE_LABELS[topType[0]] ?? topType[0]}" (${topType[1]} lần).`);
-    if (resolvedToday > 0)
-      insights.push(`Hôm nay đã tự giải quyết ${resolvedToday} issue.`);
-    if (insights.length === 0)
-      insights.push(`Phát hiện ${issues.length} issues trong kỳ. Không có issue nghiêm trọng nào đang mở.`);
+    if (locale === 'en') {
+      if (criticalCount > 0)
+        insights.push(`There are ${criticalCount} high/critical issues open — needs immediate attention.`);
+      if (topType)
+        insights.push(`Most common issue: "${labels[topType[0]] ?? topType[0]}" (${topType[1]} times).`);
+      if (resolvedToday > 0)
+        insights.push(`${resolvedToday} issue(s) auto-resolved today.`);
+      if (insights.length === 0)
+        insights.push(`${issues.length} issue(s) detected this period. No severe issues currently open.`);
+    } else {
+      if (criticalCount > 0)
+        insights.push(`Có ${criticalCount} issues mức độ high/critical đang mở — cần xử lý ngay.`);
+      if (topType)
+        insights.push(`Issue phổ biến nhất: "${labels[topType[0]] ?? topType[0]}" (${topType[1]} lần).`);
+      if (resolvedToday > 0)
+        insights.push(`Hôm nay đã tự giải quyết ${resolvedToday} issue.`);
+      if (insights.length === 0)
+        insights.push(`Phát hiện ${issues.length} issues trong kỳ. Không có issue nghiêm trọng nào đang mở.`);
+    }
     aiInsight = insights.join(' ');
   }
 

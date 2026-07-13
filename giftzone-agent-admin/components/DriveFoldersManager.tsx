@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { Plus, Trash2, FolderOpen, ExternalLink } from 'lucide-react';
+import { useLocale } from '@/components/LocaleProvider';
 
 interface DriveFolder {
   id: number;
@@ -11,6 +12,7 @@ interface DriveFolder {
 }
 
 export default function DriveFoldersManager({ initial }: { initial: DriveFolder[] }) {
+  const { t } = useLocale();
   const [folders, setFolders] = useState<DriveFolder[]>(initial);
   const [newId, setNewId]     = useState('');
   const [newNote, setNewNote] = useState('');
@@ -20,7 +22,7 @@ export default function DriveFoldersManager({ initial }: { initial: DriveFolder[
 
   async function add() {
     const folder_id = newId.trim();
-    if (!folder_id) { setError('Nhập folder ID'); return; }
+    if (!folder_id) { setError(t('settings.folderIdRequired')); return; }
     setError('');
     setAdding(true);
     const res = await fetch('/api/drive-folders', {
@@ -39,7 +41,7 @@ export default function DriveFoldersManager({ initial }: { initial: DriveFolder[
       setNewId('');
       setNewNote('');
     } else {
-      setError('Lưu thất bại');
+      setError(t('settings.folderSaveFailed'));
     }
     setAdding(false);
   }
@@ -92,10 +94,10 @@ export default function DriveFoldersManager({ initial }: { initial: DriveFolder[
 
       {/* Form thêm mới */}
       <div className="bg-white rounded-xl border border-gray-200 px-4 py-4 space-y-2">
-        <p className="text-xs font-medium text-gray-700 mb-2">Thêm folder mới</p>
+        <p className="text-xs font-medium text-gray-700 mb-2">{t('settings.addFolderTitle')}</p>
         <input
           type="text"
-          placeholder="Folder ID (ví dụ: 1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OM)"
+          placeholder={t('settings.folderIdPlaceholder')}
           value={newId}
           onChange={e => setNewId(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && add()}
@@ -103,7 +105,7 @@ export default function DriveFoldersManager({ initial }: { initial: DriveFolder[
         />
         <input
           type="text"
-          placeholder="Ghi chú nội dung (ví dụ: Bảng giá sản phẩm, chính sách bảo hành...)"
+          placeholder={t('settings.folderNotePlaceholder')}
           value={newNote}
           onChange={e => setNewNote(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && add()}
@@ -116,12 +118,12 @@ export default function DriveFoldersManager({ initial }: { initial: DriveFolder[
           className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50"
         >
           <Plus size={14} />
-          {adding ? 'Đang lưu...' : 'Thêm'}
+          {adding ? t('common.saving') : t('settings.addFolder')}
         </button>
       </div>
 
       <p className="text-xs text-gray-400">
-        Folder ID lấy từ URL Google Drive: drive.google.com/drive/folders/<span className="font-mono">{'<ID>'}</span>
+        {t('settings.folderHelp')}
       </p>
     </div>
   );

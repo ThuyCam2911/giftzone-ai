@@ -6,7 +6,7 @@ import GroupTypeManager from '@/components/GroupTypeManager';
 import GZMemberManager from '@/components/GZMemberManager';
 import { query } from '@/lib/db';
 import { getInactiveGroups } from '@/lib/queries/group-detail';
-import { timeAgo } from '@/lib/utils';
+import { getDict } from '@/lib/i18n/server';
 import { AlertCircle } from 'lucide-react';
 
 interface GroupRow {
@@ -27,6 +27,7 @@ interface CandidateRow extends MemberRow {
 }
 
 export default async function GroupsPage() {
+  const { t } = await getDict();
   const [groups, savedMembers, candidates, inactiveGroups] = await Promise.all([
     query<GroupRow>(
       `SELECT group_id, name, group_type, updated_at FROM group_names WHERE COALESCE(group_type,'customer') != 'direct' ORDER BY name`,
@@ -52,9 +53,9 @@ export default async function GroupsPage() {
       <Sidebar />
       <main className="flex-1 overflow-auto min-w-0">
         <div className="sticky top-0 z-10 bg-gray-50/90 backdrop-blur border-b border-gray-200 px-4 pt-18 pb-3 md:pt-4 md:px-8 md:pb-4">
-          <h1 className="text-lg font-bold text-gray-900">Quản lý nhóm</h1>
+          <h1 className="text-lg font-bold text-gray-900">{t('groups.title')}</h1>
           <p className="text-xs text-gray-500 mt-0.5">
-            Phân loại nhóm Zalo và cấu hình team GiftZone.
+            {t('groups.subtitle')}
           </p>
         </div>
         <div className="px-4 pb-8 md:px-8 pt-6 max-w-2xl space-y-8">
@@ -64,10 +65,10 @@ export default async function GroupsPage() {
             <section>
               <h2 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
                 <AlertCircle size={14} className="text-amber-400" />
-                Nhóm im lặng ({inactiveGroups.length})
+                {t('groups.inactiveTitle')} ({inactiveGroups.length})
               </h2>
               <p className="text-xs text-gray-400 mb-3">
-                Nhóm khách không có tin nhắn mới trong 3+ ngày — cân nhắc follow-up.
+                {t('groups.inactiveSub')}
               </p>
               <div className="bg-white rounded-xl border border-amber-100 divide-y divide-gray-50">
                 {inactiveGroups.map(g => (
@@ -83,7 +84,7 @@ export default async function GroupsPage() {
                       style={g.days_silent >= 7
                         ? { background: '#fef2f2', color: '#b91c1c' }
                         : { background: '#fff7ed', color: '#c2410c' }}>
-                      {g.days_silent} ngày
+                      {g.days_silent} {t('groups.daysSilent')}
                     </span>
                   </Link>
                 ))}
@@ -92,14 +93,14 @@ export default async function GroupsPage() {
           )}
 
           <section>
-            <h2 className="text-sm font-semibold text-gray-700 mb-3">Phân loại nhóm</h2>
+            <h2 className="text-sm font-semibold text-gray-700 mb-3">{t('groups.classifyTitle')}</h2>
             <GroupTypeManager groups={groups} />
           </section>
 
           <section>
-            <h2 className="text-sm font-semibold text-gray-700 mb-1">Thành viên team GiftZone</h2>
+            <h2 className="text-sm font-semibold text-gray-700 mb-1">{t('groups.membersTitle')}</h2>
             <p className="text-xs text-gray-400 mb-3">
-              Giúp AI phân biệt khách đang hỏi GZ hay đang trao đổi nội bộ — tránh cảnh báo sai.
+              {t('groups.membersSub')}
             </p>
             <GZMemberManager saved={savedMembers} candidates={candidates} />
           </section>

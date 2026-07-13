@@ -2,13 +2,7 @@
 
 import { useState } from 'react';
 import { Users, Save } from 'lucide-react';
-
-const ROLES = [
-  { value: 'sales',     label: 'Sales' },
-  { value: 'cs',        label: 'CS' },
-  { value: 'manager',   label: 'Manager' },
-  { value: 'technical', label: 'Technical' },
-];
+import { useLocale } from '@/components/LocaleProvider';
 
 interface Member {
   sender_uid: string;
@@ -26,6 +20,13 @@ interface Props {
 }
 
 export default function GZMemberManager({ saved: initialSaved, candidates }: Props) {
+  const { t } = useLocale();
+  const ROLES = [
+    { value: 'sales',     label: t('ze.accounts.roleSales') },
+    { value: 'cs',        label: t('ze.accounts.roleCS') },
+    { value: 'manager',   label: t('ze.accounts.roleManager') },
+    { value: 'technical', label: t('ze.accounts.roleTechnical') },
+  ];
   const savedUids = new Set(initialSaved.map(m => m.sender_uid));
   const savedRoleMap = Object.fromEntries(initialSaved.map(m => [m.sender_uid, m.role ?? 'sales']));
 
@@ -77,13 +78,13 @@ export default function GZMemberManager({ saved: initialSaved, candidates }: Pro
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        setError(body.error ?? `Lỗi ${res.status}`);
+        setError(body.error ?? `Error ${res.status}`);
       } else {
         setError(null);
         setSavedOk(true);
       }
     } catch {
-      setError('Không thể kết nối server');
+      setError(t('groups.saveError'));
     }
     setSaving(false);
   }
@@ -91,7 +92,7 @@ export default function GZMemberManager({ saved: initialSaved, candidates }: Pro
   if (candidates.length === 0) {
     return (
       <p className="text-xs text-gray-400 py-4">
-        Chưa có dữ liệu — sẽ hiển thị danh sách người đã nhắn tin trong nhóm khách sau khi agent nhận được tin nhắn.
+        {t('groups.noCandidates')}
       </p>
     );
   }
@@ -106,14 +107,14 @@ export default function GZMemberManager({ saved: initialSaved, candidates }: Pro
           <div className="flex items-center gap-2">
             <Users size={14} className="text-gray-400" />
             <span className="text-xs font-semibold text-gray-600 uppercase tracking-wide">
-              Chọn thành viên team GiftZone
+              {t('groups.selectMembersTitle')}
             </span>
           </div>
-          <span className="text-xs text-gray-400">{selected.size} đã chọn</span>
+          <span className="text-xs text-gray-400">{selected.size} {t('groups.selectedCount')}</span>
         </div>
 
         <p className="text-xs text-gray-400 px-5 pt-3 pb-1">
-          Tick những người là nhân viên GZ và chọn role. AI sẽ phân biệt Sales/CS khi giám sát chất lượng hội thoại.
+          {t('groups.selectMembersHint')}
         </p>
 
         <ul className="divide-y divide-gray-50">
@@ -153,10 +154,10 @@ export default function GZMemberManager({ saved: initialSaved, candidates }: Pro
                     ))}
                   </select>
                 )}
-                <span className="text-xs text-gray-400 shrink-0">{c.msg_count} tin nhắn</span>
+                <span className="text-xs text-gray-400 shrink-0">{c.msg_count} {t('common.messages')}</span>
                 {savedUids.has(c.sender_uid) && (
                   <span className="text-[10px] px-1.5 py-0.5 rounded font-medium shrink-0"
-                    style={{ background: '#e6f9f1', color: '#018a4e' }}>đã lưu</span>
+                    style={{ background: '#e6f9f1', color: '#018a4e' }}>{t('groups.savedTag')}</span>
                 )}
               </li>
             );
@@ -175,7 +176,7 @@ export default function GZMemberManager({ saved: initialSaved, candidates }: Pro
           style={{ background: '#02AD64', color: 'white' }}
         >
           <Save size={14} />
-          {saving ? 'Đang lưu...' : savedOk && !hasChanged ? 'Đã lưu' : 'Lưu thay đổi'}
+          {saving ? t('common.saving') : savedOk && !hasChanged ? t('common.saved') : t('groups.saveChanges')}
         </button>
       </div>
     </div>

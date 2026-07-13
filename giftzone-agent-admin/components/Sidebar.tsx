@@ -15,47 +15,58 @@ import {
   Menu,
   X,
   Sparkles,
+  Building2,
+  PieChart,
 } from 'lucide-react';
+import { useLocale } from '@/components/LocaleProvider';
+import LanguageSwitcher from '@/components/LanguageSwitcher';
+import type { DictKey } from '@/lib/i18n/dictionary';
 
-const navGroups = [
+interface NavItem { href: string; labelKey: DictKey; icon: typeof LayoutDashboard }
+interface NavGroup { labelKey: DictKey; items: NavItem[] }
+
+const navGroups: NavGroup[] = [
   {
-    label: 'Demo',
+    labelKey: 'sidebar.groupZenterprise',
     items: [
-      { href: '/demo', label: 'Demo trực tiếp', icon: Sparkles },
+      { href: '/zenterprise/accounts',  labelKey: 'sidebar.zenterpriseAccounts',  icon: Building2 },
+      { href: '/zenterprise/live',      labelKey: 'sidebar.zenterpriseLive',      icon: Sparkles },
+      { href: '/zenterprise/dashboard', labelKey: 'sidebar.zenterpriseDashboard', icon: PieChart },
     ],
   },
   {
-    label: 'Tổng quan',
+    labelKey: 'sidebar.groupOverview',
     items: [
-      { href: '/overview',  label: 'Tổng quan',   icon: LayoutDashboard },
-      { href: '/analytics', label: 'Analytics',   icon: BarChart2 },
+      { href: '/overview',  labelKey: 'sidebar.overview',  icon: LayoutDashboard },
+      { href: '/analytics', labelKey: 'sidebar.analytics', icon: BarChart2 },
     ],
   },
   {
-    label: 'Giám sát',
+    labelKey: 'sidebar.groupMonitor',
     items: [
-      { href: '/deals',     label: 'Chất lượng',  icon: Star },
-      { href: '/logs',      label: 'AI Logs',     icon: MessageSquare },
+      { href: '/deals', labelKey: 'sidebar.deals', icon: Star },
+      { href: '/logs',  labelKey: 'sidebar.logs',  icon: MessageSquare },
     ],
   },
   {
-    label: 'Quản lý',
+    labelKey: 'sidebar.groupManage',
     items: [
-      { href: '/sales-members',  label: 'Nhân viên',      icon: Users },
-      { href: '/knowledge-base', label: 'Knowledge Base', icon: BookOpen },
-      { href: '/groups',         label: 'Nhóm Zalo',      icon: Users },
-      { href: '/settings',       label: 'Cài đặt',        icon: Settings },
+      { href: '/sales-members',  labelKey: 'sidebar.salesMembers',  icon: Users },
+      { href: '/knowledge-base', labelKey: 'sidebar.knowledgeBase', icon: BookOpen },
+      { href: '/groups',         labelKey: 'sidebar.groups',        icon: Users },
+      { href: '/settings',       labelKey: 'sidebar.settings',      icon: Settings },
     ],
   },
 ];
 
 function NavItems({ pathname, onClose }: { pathname: string; onClose?: () => void }) {
+  const { t } = useLocale();
   return (
     <nav className="flex-1 px-3 py-4 overflow-y-auto space-y-5">
       {navGroups.map(group => (
-        <div key={group.label}>
+        <div key={group.labelKey}>
           <p className="px-3 mb-1 text-[10px] font-semibold uppercase tracking-widest text-gray-400">
-            {group.label}
+            {t(group.labelKey)}
           </p>
           <div className="space-y-0.5">
             {group.items.map(item => {
@@ -74,7 +85,7 @@ function NavItems({ pathname, onClose }: { pathname: string; onClose?: () => voi
                   }
                 >
                   <Icon size={16} strokeWidth={active ? 2.5 : 2} />
-                  {item.label}
+                  {t(item.labelKey)}
                 </Link>
               );
             })}
@@ -86,6 +97,7 @@ function NavItems({ pathname, onClose }: { pathname: string; onClose?: () => voi
 }
 
 function Logo() {
+  const { t } = useLocale();
   return (
     <div className="flex items-center gap-2.5">
       <div className="w-8 h-8 rounded-lg overflow-hidden flex items-center justify-center shrink-0"
@@ -93,8 +105,8 @@ function Logo() {
         <Image src="/logo.png" alt="GiftZone" width={28} height={28} className="object-contain" />
       </div>
       <div>
-        <p className="font-bold text-white text-sm leading-tight">GiftZone</p>
-        <p className="text-xs leading-tight" style={{ color: 'rgba(255,255,255,0.75)' }}>AI Dashboard</p>
+        <p className="font-bold text-white text-sm leading-tight">{t('sidebar.appName')}</p>
+        <p className="text-xs leading-tight" style={{ color: 'rgba(255,255,255,0.75)' }}>{t('sidebar.appSubtitle')}</p>
       </div>
     </div>
   );
@@ -103,6 +115,7 @@ function Logo() {
 export default function Sidebar() {
   const pathname = usePathname();
   const router   = useRouter();
+  const { t } = useLocale();
   const [open, setOpen] = useState(false);
 
   async function logout() {
@@ -118,15 +131,22 @@ export default function Sidebar() {
           <div className="w-7 h-7 rounded overflow-hidden">
             <Image src="/logo.png" alt="GiftZone" width={28} height={28} className="object-contain" />
           </div>
-          <span className="font-bold text-sm text-gray-800">GiftZone</span>
+          <span className="font-bold text-sm text-gray-800">{t('sidebar.appName')}</span>
         </div>
-        <button
-          onClick={() => setOpen(o => !o)}
-          className="p-2 rounded-lg text-gray-500 hover:bg-gray-100"
-          aria-label="Menu"
-        >
-          {open ? <X size={18} /> : <Menu size={18} />}
-        </button>
+        <div className="flex items-center gap-2">
+          <div className="w-24">
+            <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-0.5">
+              <LanguageSwitcherLight />
+            </div>
+          </div>
+          <button
+            onClick={() => setOpen(o => !o)}
+            className="p-2 rounded-lg text-gray-500 hover:bg-gray-100"
+            aria-label="Menu"
+          >
+            {open ? <X size={18} /> : <Menu size={18} />}
+          </button>
+        </div>
       </header>
 
       {/* ── Mobile drawer overlay ── */}
@@ -140,16 +160,17 @@ export default function Sidebar() {
         <div className="px-3 py-4 border-t border-gray-100 shrink-0">
           <button onClick={logout}
             className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-gray-400 hover:bg-red-50 hover:text-red-500 transition-colors">
-            <LogOut size={16} /> Đăng xuất
+            <LogOut size={16} /> {t('common.logout')}
           </button>
         </div>
       </div>
 
       {/* ── Desktop sidebar ── */}
       <aside className="hidden md:flex w-56 shrink-0 flex-col sticky top-0 h-screen bg-white border-r border-gray-200">
-        <div className="px-5 py-6 shrink-0"
+        <div className="px-5 py-6 shrink-0 space-y-3"
           style={{ background: 'linear-gradient(135deg, #02AD64 0%, #018a4e 100%)' }}>
           <Logo />
+          <LanguageSwitcher />
         </div>
 
         <NavItems pathname={pathname} />
@@ -159,10 +180,29 @@ export default function Sidebar() {
             onClick={logout}
             className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-gray-400 hover:bg-red-50 hover:text-red-500 transition-colors"
           >
-            <LogOut size={16} /> Đăng xuất
+            <LogOut size={16} /> {t('common.logout')}
           </button>
         </div>
       </aside>
+    </>
+  );
+}
+
+// Compact VI/EN toggle for the mobile top bar (light background variant)
+function LanguageSwitcherLight() {
+  const { locale, setLocale } = useLocale();
+  return (
+    <>
+      {(['vi', 'en'] as const).map(l => (
+        <button
+          key={l}
+          onClick={() => setLocale(l)}
+          className="text-[11px] font-semibold px-2 py-1 rounded-md transition-colors uppercase"
+          style={locale === l ? { background: 'white', color: '#018a4e', boxShadow: '0 1px 2px rgba(0,0,0,0.08)' } : { color: '#9ca3af' }}
+        >
+          {l}
+        </button>
+      ))}
     </>
   );
 }

@@ -3,25 +3,27 @@ export const dynamic = 'force-dynamic';
 import Link from 'next/link';
 import Sidebar from '@/components/Sidebar';
 import { getGroupDetail } from '@/lib/queries/group-detail';
-import { ISSUE_LABELS } from '@/lib/queries/deals';
+import { getIssueLabels } from '@/lib/queries/deals';
+import { getDict } from '@/lib/i18n/server';
 import { timeAgo } from '@/lib/utils';
 import { ArrowLeft, MessageSquare, Bot, AlertTriangle, Users, Sparkles, Webhook } from 'lucide-react';
 
-const SEV: Record<string, { bg: string; color: string; label: string }> = {
-  critical: { bg: '#fef2f2', color: '#b91c1c', label: 'Khẩn cấp' },
-  high:     { bg: '#fff7ed', color: '#c2410c', label: 'Cao' },
-  medium:   { bg: '#fffbeb', color: '#b45309', label: 'Trung bình' },
-  low:      { bg: '#f9fafb', color: '#6b7280', label: 'Thấp' },
-};
-
-const GROUP_TYPE_LABEL: Record<string, string> = {
-  customer: 'Khách hàng',
-  internal: 'Nội bộ',
-};
-
 export default async function GroupDetailPage({ params }: { params: Promise<{ groupId: string }> }) {
   const { groupId } = await params;
+  const { t, locale } = await getDict();
   const data = await getGroupDetail(groupId);
+  const issueLabels = getIssueLabels(locale);
+
+  const SEV: Record<string, { bg: string; color: string; label: string }> = {
+    critical: { bg: '#fef2f2', color: '#b91c1c', label: t('groupDetail.severityCritical') },
+    high:     { bg: '#fff7ed', color: '#c2410c', label: t('groupDetail.severityHigh') },
+    medium:   { bg: '#fffbeb', color: '#b45309', label: t('groupDetail.severityMedium') },
+    low:      { bg: '#f9fafb', color: '#6b7280', label: t('groupDetail.severityLow') },
+  };
+  const GROUP_TYPE_LABEL: Record<string, string> = {
+    customer: t('groupDetail.typeCustomer'),
+    internal: t('groupDetail.typeInternal'),
+  };
 
   const groupName = data.group?.name ?? groupId;
   const groupType = data.group?.group_type ?? 'customer';
@@ -32,7 +34,7 @@ export default async function GroupDetailPage({ params }: { params: Promise<{ gr
       <main className="flex-1 overflow-auto min-w-0">
         <div className="sticky top-0 z-10 bg-gray-50/90 backdrop-blur border-b border-gray-200 px-4 pt-18 pb-3 md:pt-4 md:px-8 md:pb-4">
           <Link href="/groups" className="inline-flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-600 mb-2">
-            <ArrowLeft size={12} /> Quay lại
+            <ArrowLeft size={12} /> {t('groupDetail.back')}
           </Link>
           <div className="flex items-center gap-3">
             <h1 className="text-lg font-bold text-gray-900 truncate">{groupName}</h1>
@@ -45,22 +47,22 @@ export default async function GroupDetailPage({ params }: { params: Promise<{ gr
 
         <div className="px-4 pb-8 md:px-8 pt-6 space-y-6 max-w-3xl">
 
-          {/* ── Demo banner ── */}
-          {groupId.startsWith('demo-') && (
+          {/* ── zEnterprise Live sync banner ── */}
+          {groupId.startsWith('live-') && (
             <div className="rounded-xl border px-4 py-3 flex items-start gap-3"
               style={{ background: '#e6f9f1', borderColor: '#02AD64' }}>
               <Webhook size={16} className="text-[#018a4e] mt-0.5 shrink-0" />
               <div className="flex-1">
                 <p className="text-sm font-semibold" style={{ color: '#018a4e' }}>
-                  Đây là dữ liệu vừa được đồng bộ qua Webhook từ hội thoại minh họa zEnterprise
+                  {t('groupDetail.demoSyncedTitle')}
                 </p>
                 <p className="text-xs mt-0.5" style={{ color: '#018a4e' }}>
-                  Tin nhắn, KPI và phân tích AI bên dưới được ghi trực tiếp vào cùng hệ thống dữ liệu production — không phải màn hình dựng riêng cho demo.
+                  {t('groupDetail.demoSyncedBody')}
                 </p>
               </div>
-              <Link href="/demo" className="flex items-center gap-1 text-xs font-medium shrink-0 px-2.5 py-1.5 rounded-lg bg-white"
+              <Link href="/zenterprise/live" className="flex items-center gap-1 text-xs font-medium shrink-0 px-2.5 py-1.5 rounded-lg bg-white"
                 style={{ color: '#018a4e' }}>
-                <Sparkles size={12} /> Demo mới
+                <Sparkles size={12} /> {t('groupDetail.newLive')}
               </Link>
             </div>
           )}
@@ -68,9 +70,9 @@ export default async function GroupDetailPage({ params }: { params: Promise<{ gr
           {/* ── KPI row ── */}
           <div className="grid grid-cols-3 gap-3">
             {[
-              { icon: MessageSquare, label: 'Tổng tin nhắn', value: data.msgStats.total.toLocaleString() },
-              { icon: MessageSquare, label: '7 ngày qua',    value: data.msgStats.last7Days.toLocaleString() },
-              { icon: Bot,           label: 'Lần hỏi AI',   value: data.aiLogs.length + (data.aiLogs.length === 20 ? '+' : '') },
+              { icon: MessageSquare, label: t('groupDetail.totalMessages'), value: data.msgStats.total.toLocaleString() },
+              { icon: MessageSquare, label: t('groupDetail.last7Days'),     value: data.msgStats.last7Days.toLocaleString() },
+              { icon: Bot,           label: t('groupDetail.aiQueries'),     value: data.aiLogs.length + (data.aiLogs.length === 20 ? '+' : '') },
             ].map(({ icon: Icon, label, value }) => (
               <div key={label} className="bg-white rounded-xl border border-gray-200 px-4 py-3">
                 <div className="flex items-center gap-1.5 mb-1">
@@ -87,7 +89,7 @@ export default async function GroupDetailPage({ params }: { params: Promise<{ gr
             <section>
               <h2 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
                 <AlertTriangle size={14} className="text-red-400" />
-                Issues đang mở ({data.openIssues.length})
+                {t('groupDetail.openIssuesTitle')} ({data.openIssues.length})
               </h2>
               <div className="bg-white rounded-xl border border-gray-200 divide-y divide-gray-50">
                 {data.openIssues.map(issue => {
@@ -107,7 +109,7 @@ export default async function GroupDetailPage({ params }: { params: Promise<{ gr
                         </span>
                       </div>
                       <p className="text-[10px] text-gray-400 mt-1">
-                        {ISSUE_LABELS[issue.issue_type] ?? issue.issue_type} · {timeAgo(issue.detected_at)}
+                        {issueLabels[issue.issue_type] ?? issue.issue_type} · {timeAgo(issue.detected_at)}
                       </p>
                     </div>
                   );
@@ -121,7 +123,7 @@ export default async function GroupDetailPage({ params }: { params: Promise<{ gr
             <section>
               <h2 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
                 <Users size={14} className="text-gray-400" />
-                Người nhắn tin nhiều nhất
+                {t('groupDetail.topSendersTitle')}
               </h2>
               <div className="bg-white rounded-xl border border-gray-200 divide-y divide-gray-50">
                 {data.topSenders.map((s, i) => (
@@ -130,7 +132,7 @@ export default async function GroupDetailPage({ params }: { params: Promise<{ gr
                       <span className="text-xs text-gray-300 w-4 text-right shrink-0">{i + 1}</span>
                       <span className="text-sm text-gray-800">{s.sender_name}</span>
                     </div>
-                    <span className="text-xs text-gray-400">{s.msg_count} tin</span>
+                    <span className="text-xs text-gray-400">{s.msg_count} {t('groupDetail.unit')}</span>
                   </div>
                 ))}
               </div>
@@ -141,10 +143,10 @@ export default async function GroupDetailPage({ params }: { params: Promise<{ gr
           <section>
             <h2 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
               <Bot size={14} className="text-gray-400" />
-              AI Log gần nhất
+              {t('groupDetail.aiLogTitle')}
             </h2>
             {data.aiLogs.length === 0 ? (
-              <p className="text-xs text-gray-400 py-4">Chưa có câu hỏi nào trong nhóm này.</p>
+              <p className="text-xs text-gray-400 py-4">{t('groupDetail.noQuestions')}</p>
             ) : (
               <div className="bg-white rounded-xl border border-gray-200 divide-y divide-gray-50">
                 {data.aiLogs.map(log => (

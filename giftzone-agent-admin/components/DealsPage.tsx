@@ -7,18 +7,7 @@ import {
   ChevronUp, ChevronDown, ChevronsUpDown, Check, type LucideIcon,
 } from 'lucide-react';
 import type { SalesIssue, GroupQualityRow, DealsStats } from '@/types';
-
-const SEVERITY_STYLE: Record<string, { bg: string; color: string; label: string }> = {
-  critical: { bg: '#fef2f2', color: '#b91c1c', label: 'Khẩn cấp' },
-  high:     { bg: '#fff7ed', color: '#c2410c', label: 'Cao' },
-  medium:   { bg: '#fffbeb', color: '#b45309', label: 'Trung bình' },
-  low:      { bg: '#f9fafb', color: '#6b7280', label: 'Thấp' },
-};
-
-const STATUS_STYLE: Record<string, { bg: string; color: string; label: string }> = {
-  open:     { bg: '#fef2f2', color: '#b91c1c', label: 'Đang mở' },
-  resolved: { bg: '#f0fdf4', color: '#166534', label: 'Đã giải quyết' },
-};
+import { useLocale } from '@/components/LocaleProvider';
 
 interface Props {
   stats: DealsStats;
@@ -36,12 +25,6 @@ function scoreColor(score: number) {
   return { color: '#b91c1c', bg: '#fef2f2' };
 }
 
-function scoreLabel(score: number) {
-  if (score >= 80) return 'Tốt';
-  if (score >= 60) return 'Cần chú ý';
-  return 'Kém';
-}
-
 const GROUP_PAGE_SIZE = 10;
 
 type SortKey = 'msg_count' | 'quality_score' | 'open_issues' | 'ai_queries';
@@ -49,12 +32,29 @@ type SortKey = 'msg_count' | 'quality_score' | 'open_issues' | 'ai_queries';
 export default function DealsPage({ stats, issues: initialIssues, groups, aiInsight, dateFrom, dateTo, issueLabels }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { t } = useLocale();
   const [, startTransition] = useTransition();
   const [from, setFrom] = useState(dateFrom);
   const [to, setTo] = useState(dateTo);
   const [expanded, setExpanded] = useState<number | null>(null);
   const [issues, setIssues] = useState(initialIssues);
   const [resolvingId, setResolvingId] = useState<number | null>(null);
+
+  const SEVERITY_STYLE: Record<string, { bg: string; color: string; label: string }> = {
+    critical: { bg: '#fef2f2', color: '#b91c1c', label: t('deals.severityCritical') },
+    high:     { bg: '#fff7ed', color: '#c2410c', label: t('deals.severityHigh') },
+    medium:   { bg: '#fffbeb', color: '#b45309', label: t('deals.severityMedium') },
+    low:      { bg: '#f9fafb', color: '#6b7280', label: t('deals.severityLow') },
+  };
+  const STATUS_STYLE: Record<string, { bg: string; color: string; label: string }> = {
+    open:     { bg: '#fef2f2', color: '#b91c1c', label: t('deals.statusOpen') },
+    resolved: { bg: '#f0fdf4', color: '#166534', label: t('deals.statusResolved') },
+  };
+  function scoreLabel(score: number) {
+    if (score >= 80) return t('deals.qualityGood');
+    if (score >= 60) return t('deals.qualityWarn');
+    return t('deals.qualityBad');
+  }
 
   async function resolveIssue(id: number) {
     setResolvingId(id);
@@ -103,6 +103,8 @@ export default function DealsPage({ stats, issues: initialIssues, groups, aiInsi
   const groupPages = Math.ceil(filteredGroups.length / GROUP_PAGE_SIZE);
   const pagedGroups = filteredGroups.slice((groupPage - 1) * GROUP_PAGE_SIZE, groupPage * GROUP_PAGE_SIZE);
 
+  const dateLocale = t('common.today') === 'Today' ? 'en-US' : 'vi-VN';
+
   const SortBtn = ({ k, label }: { k: SortKey; label: string }) => {
     const SortIcon = sortKey === k ? (sortAsc ? ChevronUp : ChevronDown) : ChevronsUpDown;
     return (
@@ -119,8 +121,8 @@ export default function DealsPage({ stats, issues: initialIssues, groups, aiInsi
       <div className="sticky top-0 z-10 bg-gray-50/90 backdrop-blur border-b border-gray-200 px-4 pt-18 pb-3 md:pt-4 md:px-8 md:pb-4">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-lg font-bold text-gray-900">Chất lượng hội thoại</h1>
-            <p className="text-xs text-gray-500 mt-0.5">AI phân tích chất lượng cuộc hội thoại với khách hàng · cập nhật mỗi 15 phút</p>
+            <h1 className="text-lg font-bold text-gray-900">{t('deals.title')}</h1>
+            <p className="text-xs text-gray-500 mt-0.5">{t('deals.subtitle')}</p>
           </div>
           <div className="flex flex-wrap items-center gap-2 shrink-0">
             <input type="date" value={from} onChange={e => setFrom(e.target.value)}
@@ -131,7 +133,7 @@ export default function DealsPage({ stats, issues: initialIssues, groups, aiInsi
             <button onClick={applyFilter}
               className="text-xs font-medium px-3 py-1.5 rounded-lg text-white"
               style={{ background: '#02AD64' }}>
-              Lọc
+              {t('common.filter')}
             </button>
           </div>
         </div>
@@ -141,10 +143,10 @@ export default function DealsPage({ stats, issues: initialIssues, groups, aiInsi
         {/* ── KPI cards ── */}
         <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
           {([
-            { label: 'Issues đang mở',     value: stats.openCount,     Icon: AlertTriangle,  color: '#FF6900', bg: '#fff3eb' },
-            { label: 'Nghiêm trọng / Cao', value: stats.criticalCount, Icon: Siren,          color: '#ef4444', bg: '#fef2f2' },
-            { label: 'Giải quyết hôm nay', value: stats.resolvedToday, Icon: CheckCircle2,   color: '#02AD64', bg: '#e6f9f1' },
-            { label: 'Tổng phát hiện',     value: stats.totalAllTime,  Icon: BarChart2,      color: '#6366f1', bg: '#eef2ff' },
+            { label: t('deals.statOpen'),          value: stats.openCount,     Icon: AlertTriangle,  color: '#FF6900', bg: '#fff3eb' },
+            { label: t('deals.statCritical'),      value: stats.criticalCount, Icon: Siren,          color: '#ef4444', bg: '#fef2f2' },
+            { label: t('deals.statResolvedToday'), value: stats.resolvedToday, Icon: CheckCircle2,   color: '#02AD64', bg: '#e6f9f1' },
+            { label: t('deals.statTotal'),         value: stats.totalAllTime,  Icon: BarChart2,      color: '#6366f1', bg: '#eef2ff' },
           ] as { label: string; value: number; Icon: LucideIcon; color: string; bg: string }[]).map(card => (
             <div key={card.label} className="bg-white rounded-xl border border-gray-200 p-4">
               <div className="flex items-center justify-between mb-3">
@@ -160,7 +162,7 @@ export default function DealsPage({ stats, issues: initialIssues, groups, aiInsi
           {/* Quality score card */}
           <div className="bg-white rounded-xl border border-gray-200 p-4">
             <div className="flex items-center justify-between mb-3">
-              <span className="text-xs font-medium text-gray-500 uppercase tracking-wide leading-tight">Điểm chất lượng</span>
+              <span className="text-xs font-medium text-gray-500 uppercase tracking-wide leading-tight">{t('deals.qualityScore')}</span>
               <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: '#fffbeb' }}>
                 <Star size={16} style={{ color: '#f59e0b' }} strokeWidth={1.75} />
               </div>
@@ -173,7 +175,7 @@ export default function DealsPage({ stats, issues: initialIssues, groups, aiInsi
               {scoreLabel(stats.avgScore)}
             </p>
             <p className="text-[10px] text-gray-400 mt-1">
-              −20/critical · −10/high · −5/med · −2/low
+              {t('deals.scoreLegend')}
             </p>
           </div>
         </div>
@@ -181,22 +183,22 @@ export default function DealsPage({ stats, issues: initialIssues, groups, aiInsi
         {/* ── Group breakdown table ── */}
         <div>
           <div className="flex items-center justify-between mb-3 gap-3 flex-wrap">
-            <h2 className="text-sm font-semibold text-gray-700">Hoạt động & Chất lượng theo nhóm</h2>
+            <h2 className="text-sm font-semibold text-gray-700">{t('deals.groupBreakdownTitle')}</h2>
             <div className="flex items-center gap-2">
               <select value={filterSeverity} onChange={e => { setFilterSeverity(e.target.value); setGroupPage(1); }}
                 className="text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 text-gray-700 focus:outline-none focus:ring-2 focus:ring-green-400">
-                <option value="">Tất cả nhóm</option>
-                <option value="warning">Có issue</option>
-                <option value="critical">Có critical/high</option>
+                <option value="">{t('deals.filterAll')}</option>
+                <option value="warning">{t('deals.filterWarning')}</option>
+                <option value="critical">{t('deals.filterCritical')}</option>
               </select>
-              <span className="text-xs text-gray-400">{filteredGroups.length} nhóm</span>
+              <span className="text-xs text-gray-400">{filteredGroups.length} {t('common.groups')}</span>
             </div>
           </div>
 
           <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
             {filteredGroups.length === 0 ? (
               <div className="py-12 text-center px-4">
-                <p className="text-sm text-gray-400">Chưa có dữ liệu nhóm trong kỳ này.</p>
+                <p className="text-sm text-gray-400">{t('deals.noGroupData')}</p>
               </div>
             ) : (
               <>
@@ -204,20 +206,20 @@ export default function DealsPage({ stats, issues: initialIssues, groups, aiInsi
                   <table className="w-full text-sm min-w-[700px]">
                     <thead className="bg-gray-50 border-b border-gray-200">
                       <tr>
-                        <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">NHÓM</th>
+                        <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">{t('deals.colGroup')}</th>
                         <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">
-                          <SortBtn k="msg_count" label="TIN NHẮN" />
+                          <SortBtn k="msg_count" label={t('deals.colMessages')} />
                         </th>
                         <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">
-                          <SortBtn k="quality_score" label="CHẤT LƯỢNG TB" />
+                          <SortBtn k="quality_score" label={t('deals.colAvgQuality')} />
                         </th>
                         <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">
-                          <SortBtn k="ai_queries" label="AGENT QUERY" />
+                          <SortBtn k="ai_queries" label={t('deals.colAgentQuery')} />
                         </th>
                         <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">
-                          <SortBtn k="open_issues" label="AGENT RESOLVE" />
+                          <SortBtn k="open_issues" label={t('deals.colAgentResolve')} />
                         </th>
-                        <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">CẢNH BÁO</th>
+                        <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">{t('deals.colAlert')}</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
@@ -245,13 +247,13 @@ export default function DealsPage({ stats, issues: initialIssues, groups, aiInsi
                               {g.critical > 0 && (
                                 <span className="inline-flex text-[10px] font-medium px-2 py-0.5 rounded-full mr-1"
                                   style={{ background: '#fef2f2', color: '#b91c1c' }}>
-                                  {g.critical} khẩn cấp
+                                  {g.critical} {t('deals.critical')}
                                 </span>
                               )}
                               {g.high > 0 && (
                                 <span className="inline-flex text-[10px] font-medium px-2 py-0.5 rounded-full mr-1"
                                   style={{ background: '#fff7ed', color: '#c2410c' }}>
-                                  {g.high} cao
+                                  {g.high} {t('deals.high')}
                                 </span>
                               )}
                               {g.critical === 0 && g.high === 0 && g.open_issues === 0 && (
@@ -269,18 +271,18 @@ export default function DealsPage({ stats, issues: initialIssues, groups, aiInsi
                 {groupPages > 1 && (
                   <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100">
                     <span className="text-xs text-gray-400">
-                      Trang {groupPage}/{groupPages} · {filteredGroups.length} nhóm
+                      {t('common.page')} {groupPage}/{groupPages} · {filteredGroups.length} {t('common.groups')}
                     </span>
                     <div className="flex gap-1">
                       <button onClick={() => setGroupPage(p => Math.max(1, p - 1))}
                         disabled={groupPage === 1}
                         className="px-2.5 py-1 text-xs rounded border border-gray-200 disabled:opacity-40 hover:bg-gray-50">
-                        ‹ Trước
+                        {t('common.prev')}
                       </button>
                       <button onClick={() => setGroupPage(p => Math.min(groupPages, p + 1))}
                         disabled={groupPage === groupPages}
                         className="px-2.5 py-1 text-xs rounded border border-gray-200 disabled:opacity-40 hover:bg-gray-50">
-                        Sau ›
+                        {t('common.next')}
                       </button>
                     </div>
                   </div>
@@ -293,8 +295,8 @@ export default function DealsPage({ stats, issues: initialIssues, groups, aiInsi
         {/* ── Issue table ── */}
         <div>
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-semibold text-gray-700">Danh sách issues</h2>
-            <span className="text-xs text-gray-400 hidden sm:block">{issues.length} issues trong kỳ</span>
+            <h2 className="text-sm font-semibold text-gray-700">{t('deals.issuesListTitle')}</h2>
+            <span className="text-xs text-gray-400 hidden sm:block">{issues.length} {t('deals.issuesInPeriod')}</span>
           </div>
 
           <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
@@ -303,9 +305,9 @@ export default function DealsPage({ stats, issues: initialIssues, groups, aiInsi
                 <div className="flex justify-center mb-2">
                   <CheckCircle2 size={36} style={{ color: '#02AD64' }} strokeWidth={1.5} />
                 </div>
-                <p className="text-sm text-gray-500 font-medium">Không có issue nào trong kỳ này</p>
+                <p className="text-sm text-gray-500 font-medium">{t('deals.noIssuesTitle')}</p>
                 <p className="text-xs text-gray-400 mt-1 max-w-xs mx-auto">
-                  Agent đang giám sát — issues sẽ xuất hiện khi phát hiện vấn đề trong hội thoại.
+                  {t('deals.noIssuesBody')}
                 </p>
               </div>
             ) : (
@@ -313,12 +315,12 @@ export default function DealsPage({ stats, issues: initialIssues, groups, aiInsi
                 <table className="w-full text-sm min-w-[640px]">
                   <thead className="bg-gray-50 border-b border-gray-200">
                     <tr>
-                      <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">NHÓM</th>
-                      <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">LOẠI</th>
-                      <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">MỨC ĐỘ</th>
-                      <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">MÔ TẢ</th>
-                      <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">TRẠNG THÁI</th>
-                      <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">PHÁT HIỆN</th>
+                      <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">{t('deals.colGroup')}</th>
+                      <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">{t('deals.colType')}</th>
+                      <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">{t('deals.colSeverity')}</th>
+                      <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">{t('deals.colDescription')}</th>
+                      <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">{t('deals.colStatus')}</th>
+                      <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">{t('deals.colDetected')}</th>
                       <th className="px-4 py-3"></th>
                     </tr>
                   </thead>
@@ -355,19 +357,19 @@ export default function DealsPage({ stats, issues: initialIssues, groups, aiInsi
                               </span>
                             </td>
                             <td className="px-4 py-3 text-xs text-gray-400 whitespace-nowrap">
-                              {new Date(issue.detected_at).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', dateStyle: 'short', timeStyle: 'short' })}
+                              {new Date(issue.detected_at).toLocaleString(dateLocale, { timeZone: 'Asia/Ho_Chi_Minh', dateStyle: 'short', timeStyle: 'short' })}
                             </td>
                             <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
                               {issue.status === 'open' && (
                                 <button
                                   onClick={() => resolveIssue(issue.id)}
                                   disabled={resolvingId === issue.id}
-                                  title="Đánh dấu đã giải quyết"
+                                  title={t('deals.resolveTitle')}
                                   className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-colors disabled:opacity-40"
                                   style={{ background: '#e6f9f1', color: '#018a4e' }}
                                 >
                                   <Check size={11} />
-                                  {resolvingId === issue.id ? '...' : 'Resolve'}
+                                  {resolvingId === issue.id ? '...' : t('deals.resolve')}
                                 </button>
                               )}
                             </td>
@@ -377,7 +379,7 @@ export default function DealsPage({ stats, issues: initialIssues, groups, aiInsi
                               <td colSpan={7} className="px-4 py-3">
                                 {issue.description && (
                                   <p className="text-xs text-gray-600 mb-1">
-                                    <span className="font-medium">Giải thích:</span> {issue.description}
+                                    <span className="font-medium">{t('deals.explanationLabel')}</span> {issue.description}
                                   </p>
                                 )}
                                 {issue.evidence && (
@@ -403,17 +405,17 @@ export default function DealsPage({ stats, issues: initialIssues, groups, aiInsi
           <div className="rounded-xl border border-indigo-100 overflow-hidden">
             <div className="flex items-center gap-2 px-4 py-3 border-b border-indigo-100"
               style={{ background: 'linear-gradient(135deg, #6366f108, #8b5cf608)' }}>
-              <span className="text-indigo-500 text-xs font-semibold tracking-wide">✦ Nhận xét tự động</span>
+              <span className="text-indigo-500 text-xs font-semibold tracking-wide">{t('deals.aiInsightTitle')}</span>
             </div>
             <div className="p-4 bg-white">
               {aiInsight ? (
                 <>
                   <p className="text-sm text-gray-700 leading-relaxed">{aiInsight}</p>
-                  <p className="text-xs text-gray-400 mt-3">Tự động · dữ liệu từ hội thoại Zalo</p>
+                  <p className="text-xs text-gray-400 mt-3">{t('deals.aiInsightFooter')}</p>
                 </>
               ) : (
                 <p className="text-sm text-gray-400 italic">
-                  Chưa đủ dữ liệu — nhận xét sẽ hiện sau khi agent phân tích được ít nhất một nhóm.
+                  {t('deals.aiInsightEmpty')}
                 </p>
               )}
             </div>
@@ -421,12 +423,12 @@ export default function DealsPage({ stats, issues: initialIssues, groups, aiInsi
 
           <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
             <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-              <span className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Cập nhật gần đây</span>
+              <span className="text-xs font-semibold text-gray-600 uppercase tracking-wide">{t('deals.recentUpdatesTitle')}</span>
               <span className="text-xs text-gray-400">{recentFeed.length} issues</span>
             </div>
             <div className="p-4 space-y-3 max-h-64 overflow-y-auto">
               {recentFeed.length === 0 ? (
-                <p className="text-xs text-gray-400 text-center py-4">Chưa có issue nào trong kỳ này.</p>
+                <p className="text-xs text-gray-400 text-center py-4">{t('deals.noRecentIssues')}</p>
               ) : recentFeed.map((issue, i) => {
                 const sev = SEVERITY_STYLE[issue.severity] ?? SEVERITY_STYLE.medium;
                 return (
@@ -441,7 +443,7 @@ export default function DealsPage({ stats, issues: initialIssues, groups, aiInsi
                         {sev.label} · {issueLabels[issue.issue_type] ?? issue.issue_type}
                       </p>
                       <p className="text-xs text-gray-300 mt-0.5">
-                        {new Date(issue.detected_at).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', dateStyle: 'short', timeStyle: 'short' })}
+                        {new Date(issue.detected_at).toLocaleString(dateLocale, { timeZone: 'Asia/Ho_Chi_Minh', dateStyle: 'short', timeStyle: 'short' })}
                       </p>
                     </div>
                   </div>

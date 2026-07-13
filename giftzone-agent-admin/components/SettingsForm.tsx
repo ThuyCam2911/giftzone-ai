@@ -1,5 +1,6 @@
 'use client';
 import { useState } from 'react';
+import { useLocale } from '@/components/LocaleProvider';
 
 interface ConfigRow {
   key: string;
@@ -19,6 +20,7 @@ const TEXTAREA_KEYS = ['zalo_cookie'];
 const MASKED_KEYS = ['zalo_cookie'];
 
 export default function SettingsForm({ rows }: { rows: ConfigRow[] }) {
+  const { t } = useLocale();
   const editableRows = rows.filter(r => !READ_ONLY_KEYS.includes(r.key));
 
   const [values, setValues] = useState<Record<string, string>>(
@@ -49,7 +51,7 @@ export default function SettingsForm({ rows }: { rows: ConfigRow[] }) {
     setSaving(null);
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
-      setError(body.error ?? 'Lưu thất bại');
+      setError(body.error ?? t('ze.accounts.saveError'));
       return;
     }
     if (MASKED_KEYS.includes(key)) {
@@ -72,15 +74,15 @@ export default function SettingsForm({ rows }: { rows: ConfigRow[] }) {
               )}
               {MASKED_KEYS.includes(row.key) && (
                 <p className="text-xs mt-1" style={{ color: hasSecret[row.key] ? '#16a34a' : '#9ca3af' }}>
-                  {hasSecret[row.key] ? '● Đã lưu (ẩn) — nhập giá trị mới bên dưới để ghi đè' : '○ Chưa có giá trị'}
+                  {hasSecret[row.key] ? t('settings.cookieSavedHidden') : t('settings.cookieNoValue')}
                 </p>
               )}
               {TEXTAREA_KEYS.includes(row.key) ? (
                 <textarea
                   rows={4}
                   placeholder={MASKED_KEYS.includes(row.key)
-                    ? 'Để trống = giữ nguyên. Paste cookie mới ở đây để ghi đè (JSON array từ chat.zalo.me → F12 → Application → Cookies → Copy all as JSON)'
-                    : 'Paste JSON cookie array từ chat.zalo.me → F12 → Application → Cookies → Copy all as JSON'}
+                    ? t('settings.cookiePlaceholderMasked')
+                    : t('settings.cookiePlaceholder')}
                   value={values[row.key] ?? ''}
                   onChange={e => setValues(v => ({ ...v, [row.key]: e.target.value }))}
                   className="mt-2 w-full border border-gray-300 rounded-lg px-3 py-2 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
@@ -100,7 +102,7 @@ export default function SettingsForm({ rows }: { rows: ConfigRow[] }) {
               disabled={saving === row.key}
               className="mt-7 shrink-0 px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50 whitespace-nowrap"
             >
-              {saving === row.key ? 'Lưu...' : saved === row.key ? 'Đã lưu ✓' : 'Lưu'}
+              {saving === row.key ? t('common.saving') : saved === row.key ? t('common.savedCheck') : t('common.save')}
             </button>
           </div>
         </div>

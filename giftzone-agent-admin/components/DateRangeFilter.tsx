@@ -1,6 +1,7 @@
 'use client';
 import { useState, useTransition } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { useLocale } from '@/components/LocaleProvider';
 
 interface Props {
   from: string;
@@ -10,6 +11,7 @@ interface Props {
 export default function DateRangeFilter({ from: initFrom, to: initTo }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { t } = useLocale();
   const [, startTransition] = useTransition();
   const [from, setFrom] = useState(initFrom);
   const [to, setTo] = useState(initTo);
@@ -22,9 +24,9 @@ export default function DateRangeFilter({ from: initFrom, to: initTo }: Props) {
   }
 
   const presets = [
-    { label: 'Hôm nay', days: 0 },
-    { label: '7 ngày', days: 7 },
-    { label: '30 ngày', days: 30 },
+    { label: t('dateRange.today'), days: 0 },
+    { label: t('dateRange.7days'), days: 7 },
+    { label: t('dateRange.30days'), days: 30 },
   ];
 
   function applyPreset(days: number) {
@@ -74,7 +76,7 @@ export default function DateRangeFilter({ from: initFrom, to: initTo }: Props) {
       <button onClick={apply}
         className="text-xs font-medium px-3 py-1.5 rounded-lg text-white"
         style={{ background: '#02AD64' }}>
-        Lọc
+        {t('dateRange.apply')}
       </button>
     </div>
   );

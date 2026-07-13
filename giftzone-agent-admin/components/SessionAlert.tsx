@@ -1,7 +1,9 @@
 import { XCircle, AlertTriangle } from 'lucide-react';
+import { getDict } from '@/lib/i18n/server';
 
-export default function SessionAlert({ status }: { status: string }) {
+export default async function SessionAlert({ status }: { status: string }) {
   if (status === 'ok') return null;
+  const { t } = await getDict();
 
   const isExpired = status === 'expired';
   const Icon = isExpired ? XCircle : AlertTriangle;
@@ -13,9 +15,9 @@ export default function SessionAlert({ status }: { status: string }) {
       }>
       <Icon size={18} className="mt-0.5 shrink-0" />
       <div>
-        <p className="font-semibold">{isExpired ? 'Agent bị ngắt kết nối Zalo.' : 'Kết nối Zalo cần được làm mới.'}</p>
+        <p className="font-semibold">{isExpired ? t('sessionAlert.expiredTitle') : t('sessionAlert.warningTitle')}</p>
         <p className="mt-0.5 opacity-80">
-          Vào <strong>Dashboard → Cài đặt</strong> → paste Zalo cookie mới → Render Manual Deploy.
+          {t('sessionAlert.body')}
         </p>
       </div>
     </div>

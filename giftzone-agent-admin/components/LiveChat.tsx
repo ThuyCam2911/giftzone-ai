@@ -3,61 +3,94 @@
 import { useMemo, useRef, useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Send, RefreshCw, Sparkles, ArrowRight, User, Headset, Loader2 } from 'lucide-react';
+import { useLocale } from '@/components/LocaleProvider';
 
 type Role = 'customer' | 'employee';
 
 interface ChatMsg {
   id: string;
   role: Role;
-  senderId: string;   // demo-customer | demo-employee-a | demo-employee-b
+  senderId: string;   // live-customer | live-employee-a | live-employee-b
   senderName: string;
   text: string;
   system?: boolean;   // divider message (e.g. handoff notice)
 }
 
-interface Scenario {
+interface ScenarioDef {
   key: string;
-  label: string;
-  chip: string;
-  script: { role: Role; text: string }[];
+  labelKey: 'ze.live.scenarioOrder' | 'ze.live.scenarioComplaint' | 'ze.live.scenarioPromo';
+  chipKey: 'ze.live.chipOrder' | 'ze.live.chipComplaint' | 'ze.live.chipPromo';
+  script: { role: Role; text: { vi: string; en: string } }[];
 }
 
-const CUSTOMER_NAME = 'Khách hàng — Nguyễn Thị Lan';
-const EMPLOYEE_A = 'Nhân viên A — CH Nguyễn Trãi';
-const EMPLOYEE_B = 'Nhân viên B — CH Nguyễn Trãi';
-
-const SCENARIOS: Scenario[] = [
+const SCENARIOS: ScenarioDef[] = [
   {
     key: 'order',
-    label: 'Khách đặt combo qua Zalo',
-    chip: '🍗 Đặt hàng',
+    labelKey: 'ze.live.scenarioOrder',
+    chipKey: 'ze.live.chipOrder',
     script: [
-      { role: 'customer', text: 'Chào shop, cửa hàng Nguyễn Trãi còn combo 2 miếng gà + nước không ạ?' },
-      { role: 'employee', text: 'Dạ chào chị Lan! Cửa hàng còn ạ, combo 2 miếng gà giòn + Pepsi giá 89.000đ ạ.' },
-      { role: 'customer', text: 'Cho mình đặt 2 combo, giao tới 12 Nguyễn Trãi nhé.' },
-      { role: 'employee', text: 'Dạ em lên đơn 2 combo giao 12 Nguyễn Trãi ngay ạ, khoảng 20 phút sẽ tới.' },
+      { role: 'customer', text: {
+        vi: 'Chào shop, cửa hàng Nguyễn Trãi còn combo 2 miếng gà + nước không ạ?',
+        en: 'Hi, does the Nguyen Trai branch still have the 2-piece chicken + drink combo?',
+      } },
+      { role: 'employee', text: {
+        vi: 'Dạ chào chị Lan! Cửa hàng còn ạ, combo 2 miếng gà giòn + Pepsi giá 89.000đ ạ.',
+        en: 'Hi Ms. Lan! Yes we do — 2 crispy chicken pieces + Pepsi combo is 89,000₫.',
+      } },
+      { role: 'customer', text: {
+        vi: 'Cho mình đặt 2 combo, giao tới 12 Nguyễn Trãi nhé.',
+        en: "I'd like to order 2 combos, delivered to 12 Nguyen Trai please.",
+      } },
+      { role: 'employee', text: {
+        vi: 'Dạ em lên đơn 2 combo giao 12 Nguyễn Trãi ngay ạ, khoảng 20 phút sẽ tới.',
+        en: "Sure, placing your order for 2 combos to 12 Nguyen Trai now — about 20 minutes.",
+      } },
     ],
   },
   {
     key: 'complaint',
-    label: 'Khách phàn nàn giao hàng trễ',
-    chip: '⚠️ Khiếu nại',
+    labelKey: 'ze.live.scenarioComplaint',
+    chipKey: 'ze.live.chipComplaint',
     script: [
-      { role: 'customer', text: 'Đơn của mình đặt 40 phút rồi mà chưa thấy giao, gọi shipper không nghe máy.' },
-      { role: 'employee', text: 'Dạ em xin lỗi chị, em kiểm tra lại ngay ạ.' },
-      { role: 'customer', text: 'Đây là lần thứ 2 bị trễ rồi đó, mình khá thất vọng.' },
-      { role: 'employee', text: 'Dạ em rất xin lỗi vì trải nghiệm không tốt này, em sẽ báo quản lý cửa hàng xử lý ngay và tặng chị voucher cho lần sau ạ.' },
+      { role: 'customer', text: {
+        vi: 'Đơn của mình đặt 40 phút rồi mà chưa thấy giao, gọi shipper không nghe máy.',
+        en: "My order was placed 40 minutes ago and still hasn't arrived, the driver isn't answering.",
+      } },
+      { role: 'employee', text: {
+        vi: 'Dạ em xin lỗi chị, em kiểm tra lại ngay ạ.',
+        en: "I'm so sorry, let me check on that right away.",
+      } },
+      { role: 'customer', text: {
+        vi: 'Đây là lần thứ 2 bị trễ rồi đó, mình khá thất vọng.',
+        en: "This is the second time it's been late, I'm pretty disappointed.",
+      } },
+      { role: 'employee', text: {
+        vi: 'Dạ em rất xin lỗi vì trải nghiệm không tốt này, em sẽ báo quản lý cửa hàng xử lý ngay và tặng chị voucher cho lần sau ạ.',
+        en: "I sincerely apologize for the poor experience — I'll flag this to the branch manager right away and send you a voucher for next time.",
+      } },
     ],
   },
   {
     key: 'promo',
-    label: 'Khách hỏi ưu đãi thành viên',
-    chip: '🎁 Khuyến mãi',
+    labelKey: 'ze.live.scenarioPromo',
+    chipKey: 'ze.live.chipPromo',
     script: [
-      { role: 'customer', text: 'Cửa hàng có chương trình tích điểm thành viên không shop?' },
-      { role: 'employee', text: 'Dạ có ạ! Chị tích điểm mỗi đơn hàng, đủ 500 điểm đổi được 1 phần gà miễn phí ạ.' },
-      { role: 'customer', text: 'Vậy đăng ký thành viên sao nè?' },
-      { role: 'employee', text: 'Dạ chị chỉ cần chat với tụi em qua Zalo này là tự động được ghi nhận thành viên rồi ạ, không cần app riêng.' },
+      { role: 'customer', text: {
+        vi: 'Cửa hàng có chương trình tích điểm thành viên không shop?',
+        en: 'Does the store have a membership points program?',
+      } },
+      { role: 'employee', text: {
+        vi: 'Dạ có ạ! Chị tích điểm mỗi đơn hàng, đủ 500 điểm đổi được 1 phần gà miễn phí ạ.',
+        en: 'Yes! You earn points on every order — 500 points gets you a free chicken portion.',
+      } },
+      { role: 'customer', text: {
+        vi: 'Vậy đăng ký thành viên sao nè?',
+        en: 'How do I sign up for membership then?',
+      } },
+      { role: 'employee', text: {
+        vi: 'Dạ chị chỉ cần chat với tụi em qua Zalo này là tự động được ghi nhận thành viên rồi ạ, không cần app riêng.',
+        en: "Just chatting with us here on Zalo automatically registers you as a member — no separate app needed.",
+      } },
     ],
   },
 ];
@@ -68,19 +101,25 @@ function nextId() {
   return `m${Date.now()}${seq}`;
 }
 
-function scriptToMessages(s: Scenario): ChatMsg[] {
-  return s.script.map(line => ({
-    id: nextId(),
-    role: line.role,
-    senderId: line.role === 'customer' ? 'demo-customer' : 'demo-employee-a',
-    senderName: line.role === 'customer' ? CUSTOMER_NAME : EMPLOYEE_A,
-    text: line.text,
-  }));
-}
-
-export default function DemoChat() {
+export default function LiveChat() {
   const router = useRouter();
-  const [scenario, setScenario] = useState<Scenario>(SCENARIOS[0]);
+  const { t, locale } = useLocale();
+
+  const CUSTOMER_NAME = locale === 'en' ? 'Customer — Nguyen Thi Lan' : 'Khách hàng — Nguyễn Thị Lan';
+  const EMPLOYEE_A = locale === 'en' ? 'Staff A — Nguyen Trai Branch' : 'Nhân viên A — CH Nguyễn Trãi';
+  const EMPLOYEE_B = locale === 'en' ? 'Staff B — Nguyen Trai Branch' : 'Nhân viên B — CH Nguyễn Trãi';
+
+  function scriptToMessages(s: ScenarioDef): ChatMsg[] {
+    return s.script.map(line => ({
+      id: nextId(),
+      role: line.role,
+      senderId: line.role === 'customer' ? 'live-customer' : 'live-employee-a',
+      senderName: line.role === 'customer' ? CUSTOMER_NAME : EMPLOYEE_A,
+      text: line.text[locale],
+    }));
+  }
+
+  const [scenario, setScenario] = useState<ScenarioDef>(SCENARIOS[0]);
   const [messages, setMessages] = useState<ChatMsg[]>(() => scriptToMessages(SCENARIOS[0]));
   const [handoffDone, setHandoffDone] = useState(false);
   const [composerRole, setComposerRole] = useState<Role>('customer');
@@ -94,7 +133,15 @@ export default function DemoChat() {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
   }, [messages]);
 
-  function pickScenario(s: Scenario) {
+  // re-render script text when language toggles mid-session for the still-scripted (unedited) messages
+  useEffect(() => {
+    setMessages(scriptToMessages(scenario));
+    setHandoffDone(false);
+    setComposerRole('customer');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [locale]);
+
+  function pickScenario(s: ScenarioDef) {
     setScenario(s);
     setMessages(scriptToMessages(s));
     setHandoffDone(false);
@@ -106,7 +153,7 @@ export default function DemoChat() {
     return handoffDone ? EMPLOYEE_B : EMPLOYEE_A;
   }
   function currentEmployeeId() {
-    return handoffDone ? 'demo-employee-b' : 'demo-employee-a';
+    return handoffDone ? 'live-employee-b' : 'live-employee-a';
   }
 
   function sendMessage() {
@@ -114,7 +161,7 @@ export default function DemoChat() {
     const msg: ChatMsg = {
       id: nextId(),
       role: composerRole,
-      senderId: composerRole === 'customer' ? 'demo-customer' : currentEmployeeId(),
+      senderId: composerRole === 'customer' ? 'live-customer' : currentEmployeeId(),
       senderName: composerRole === 'customer' ? CUSTOMER_NAME : currentEmployeeName(),
       text: draft.trim(),
     };
@@ -131,7 +178,7 @@ export default function DemoChat() {
         role: 'employee',
         senderId: 'system',
         senderName: 'system',
-        text: `🔄 ${EMPLOYEE_A} đã nghỉ việc — công ty thu hồi tài khoản zEnterprise và gán cho ${EMPLOYEE_B}. Toàn bộ lịch sử hội thoại được giữ nguyên.`,
+        text: `🔄 ${EMPLOYEE_A} ${t('ze.live.handoffNotice')} ${EMPLOYEE_B}. ${t('ze.live.handoffNoticeEnd')}`,
         system: true,
       },
     ]);
@@ -146,7 +193,7 @@ export default function DemoChat() {
     setAnalyzing(true);
     setError(null);
 
-    const steps = ['Đang đồng bộ hội thoại qua Webhook…', 'AI đang phân tích chất lượng hội thoại…'];
+    const steps = [t('ze.live.syncing'), t('ze.live.analyzing')];
     let stepIdx = 0;
     setStatusText(steps[0]);
     const interval = setInterval(() => {
@@ -156,20 +203,20 @@ export default function DemoChat() {
 
     try {
       const payload = {
-        scenarioLabel: scenario.label,
+        scenarioLabel: t(scenario.labelKey),
         handoffOccurred: handoffDone,
         messages: messages
           .filter(m => !m.system)
           .map(m => ({ senderId: m.senderId, senderName: m.senderName, text: m.text })),
       };
-      const res = await fetch('/api/demo/analyze', {
+      const res = await fetch('/api/zenterprise/live/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        throw new Error(body.error ?? 'Phân tích thất bại');
+        throw new Error(body.error ?? t('ze.live.analyzeFailed'));
       }
       const data = await res.json();
       clearInterval(interval);
@@ -177,7 +224,7 @@ export default function DemoChat() {
     } catch (e) {
       clearInterval(interval);
       setAnalyzing(false);
-      setError(e instanceof Error ? e.message : 'Có lỗi xảy ra');
+      setError(e instanceof Error ? e.message : t('ze.live.analyzeFailed'));
     }
   }
 
@@ -185,7 +232,7 @@ export default function DemoChat() {
     <div className="max-w-3xl mx-auto space-y-4">
       {/* Scenario picker */}
       <div>
-        <p className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-2">Kịch bản demo</p>
+        <p className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-2">{t('ze.live.scenarioLabel')}</p>
         <div className="flex flex-wrap gap-2">
           {SCENARIOS.map(s => (
             <button
@@ -198,7 +245,7 @@ export default function DemoChat() {
                   : { background: 'white', color: '#6b7280', borderColor: '#e5e7eb' }
               }
             >
-              {s.chip} {s.label}
+              {t(s.chipKey)} {t(s.labelKey)}
             </button>
           ))}
         </div>
@@ -208,10 +255,10 @@ export default function DemoChat() {
       <div className="flex items-center justify-between bg-white rounded-xl border border-gray-200 px-4 py-2.5">
         <div className="flex items-center gap-2 text-xs text-gray-500">
           <Headset size={14} className={handoffDone ? 'text-orange-500' : 'text-[#02AD64]'} />
-          <span>Tài khoản zEnterprise đang chat:</span>
+          <span>{t('ze.live.currentAccount')}</span>
           <span className="font-semibold text-gray-800">{currentEmployeeName()}</span>
           {handoffDone && (
-            <span className="text-[10px] px-2 py-0.5 rounded-full bg-orange-50 text-orange-600 font-medium">đã chuyển giao</span>
+            <span className="text-[10px] px-2 py-0.5 rounded-full bg-orange-50 text-orange-600 font-medium">{t('ze.live.handedOff')}</span>
           )}
         </div>
         <button
@@ -221,7 +268,7 @@ export default function DemoChat() {
           style={{ borderColor: '#FF6900', color: '#FF6900' }}
         >
           <RefreshCw size={12} />
-          Mô phỏng: nhân viên nghỉ việc → chuyển giao
+          {t('ze.live.simulateHandoff')}
         </button>
       </div>
 
@@ -265,7 +312,7 @@ export default function DemoChat() {
               className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-lg font-medium transition-colors"
               style={composerRole === 'customer' ? { background: '#eff6ff', color: '#2563eb' } : { color: '#9ca3af' }}
             >
-              <User size={12} /> Khách hàng
+              <User size={12} /> {t('ze.live.customer')}
             </button>
             <button
               onClick={() => setComposerRole('employee')}
@@ -280,7 +327,7 @@ export default function DemoChat() {
               value={draft}
               onChange={e => setDraft(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && sendMessage()}
-              placeholder={composerRole === 'customer' ? 'Nhập tin nhắn khách hàng…' : 'Nhập tin nhắn nhân viên…'}
+              placeholder={composerRole === 'customer' ? t('ze.live.customerPlaceholder') : t('ze.live.employeePlaceholder')}
               className="flex-1 text-sm px-3.5 py-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-[#02AD64]"
             />
             <button
@@ -300,12 +347,12 @@ export default function DemoChat() {
         <div>
           <p className="text-sm font-semibold text-gray-800 flex items-center gap-1.5">
             <Sparkles size={14} className="text-[#02AD64]" />
-            Kết thúc hội thoại
+            {t('ze.live.finishTitle')}
           </p>
           <p className="text-xs text-gray-400 mt-0.5">
             {canFinish
-              ? 'Sẵn sàng đồng bộ và phân tích trên Dashboard thật.'
-              : `Cần thêm ${4 - messages.filter(m => !m.system).length} tin nhắn nữa để phân tích.`}
+              ? t('ze.live.finishReady')
+              : `${4 - messages.filter(m => !m.system).length} ${t('ze.live.finishNeedMore')}`}
           </p>
           {error && <p className="text-xs text-red-500 mt-1">{error}</p>}
         </div>
@@ -322,7 +369,7 @@ export default function DemoChat() {
             </>
           ) : (
             <>
-              Xem phân tích trên Dashboard
+              {t('ze.live.viewDashboard')}
               <ArrowRight size={15} />
             </>
           )}

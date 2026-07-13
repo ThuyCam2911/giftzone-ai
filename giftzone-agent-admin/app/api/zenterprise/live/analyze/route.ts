@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { isAuthenticated } from '@/lib/auth';
-import { insertDemoConversation, type DemoMessageInput, type DemoAnalysis } from '@/lib/queries/demo';
+import { insertLiveConversation, type LiveMessageInput, type LiveAnalysis } from '@/lib/queries/zenterprise-live';
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
 
@@ -15,9 +15,9 @@ function stripFences(text: string): string {
   return text.trim().replace(/^```json\s*/i, '').replace(/^```\s*/, '').replace(/```\s*$/, '').trim();
 }
 
-function fallbackAnalysis(messages: DemoMessageInput[]): DemoAnalysis {
+function fallbackAnalysis(messages: LiveMessageInput[]): LiveAnalysis {
   return {
-    summary: `Hội thoại demo gồm ${messages.length} tin nhắn giữa nhân viên và khách hàng.`,
+    summary: `Hội thoại gồm ${messages.length} tin nhắn giữa nhân viên và khách hàng.`,
     sentiment: 'neutral',
     category: 'Khác',
     quality_score: 7,
@@ -28,9 +28,9 @@ function fallbackAnalysis(messages: DemoMessageInput[]): DemoAnalysis {
   };
 }
 
-async function analyzeWithGemini(scenarioLabel: string, messages: DemoMessageInput[]): Promise<DemoAnalysis> {
+async function analyzeWithGemini(scenarioLabel: string, messages: LiveMessageInput[]): Promise<LiveAnalysis> {
   const transcript = messages
-    .map(m => `${m.senderId.startsWith('demo-employee') ? 'NHÂN VIÊN' : 'KHÁCH HÀNG'} (${m.senderName}): ${m.text}`)
+    .map(m => `${m.senderId.startsWith('live-employee') ? 'NHÂN VIÊN' : 'KHÁCH HÀNG'} (${m.senderName}): ${m.text}`)
     .join('\n');
 
   const prompt = `Bạn là hệ thống phân tích chất lượng hội thoại CSKH cho một chuỗi F&B trên nền tảng zEnterprise của GiftZone.
@@ -80,14 +80,14 @@ ${transcript}
 export async function POST(req: NextRequest) {
   if (!await isAuthenticated()) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  let body: { scenarioLabel?: string; messages?: DemoMessageInput[]; handoffOccurred?: boolean };
+  let body: { scenarioLabel?: string; messages?: LiveMessageInput[]; handoffOccurred?: boolean };
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
   }
 
-  const scenarioLabel = (body.scenarioLabel ?? 'Demo hội thoại').slice(0, 100);
+  const scenarioLabel = (body.scenarioLabel ?? 'zEnterprise Live').slice(0, 100);
   const messages = Array.isArray(body.messages) ? body.messages.filter(m => m?.text?.trim()) : [];
 
   if (messages.length < 2) {
@@ -101,10 +101,10 @@ export async function POST(req: NextRequest) {
   const nowLabel = new Date().toLocaleTimeString('vi-VN', {
     hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Ho_Chi_Minh',
   });
-  const groupId = `demo-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
-  const groupName = `🎬 Demo — ${scenarioLabel}${body.handoffOccurred ? ' (có chuyển giao NV)' : ''} — ${nowLabel}`;
+  const groupId = `live-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+  const groupName = `${scenarioLabel}${body.handoffOccurred ? ' (có chuyển giao NV)' : ''} — ${nowLabel}`;
 
-  await insertDemoConversation({ groupId, groupName, messages, analysis, latencyMs });
+  await insertLiveConversation({ groupId, groupName, messages, analysis, latencyMs });
 
   return NextResponse.json({ groupId, analysis });
 }

@@ -133,7 +133,10 @@ app/
 │   ├── issues/[id]/      # PATCH — manual resolve/reopen issue
 │   ├── knowledge/
 │   ├── logs/
-│   └── overview/
+│   ├── overview/
+│   └── zenterprise/
+│       ├── accounts/, accounts/[id]/   # CRUD zenterprise_accounts
+│       └── live/analyze/               # phân tích + ghi hội thoại zEnterprise Live
 ├── analytics/
 ├── deals/
 ├── groups/
@@ -142,27 +145,43 @@ app/
 ├── logs/
 ├── overview/
 ├── sales-members/        # Per-person KPI: msgs, groups, issues, response time
-└── settings/
+├── settings/
+└── zenterprise/          # zEnterprise Management (thay thế /demo cũ)
+    ├── accounts/         # CRUD tài khoản zEnterprise
+    ├── live/              # Kịch bản mô phỏng hội thoại (rename của /demo)
+    └── dashboard/         # Phân tích tổng quan + theo từng account, filter/time range
 components/
 ├── ui/                   # Reusable UI primitives (StatsCard, WeekChart)
-├── Sidebar.tsx
+├── Sidebar.tsx           # Nav groups: zEnterprise Management / Tổng quan / Giám sát / Quản lý
+├── LocaleProvider.tsx    # Context VI/EN cho toàn bộ Client Components
+├── LanguageSwitcher.tsx
 ├── AnalyticsPage.tsx     # Analytics + quality score + unanswered + response time per member
 ├── DealsPage.tsx         # + manual resolve button per issue
 ├── GZMemberManager.tsx   # + role dropdown (Sales/CS/Manager/Tech)
 ├── GroupTypeManager.tsx
 ├── SettingsForm.tsx
-└── SessionAlert.tsx
+├── SessionAlert.tsx
+├── LiveChat.tsx          # zEnterprise Live — kịch bản mô phỏng, ghi vào bảng production thật
+├── ZEnterpriseAccountsManager.tsx
+└── ZEnterpriseDashboard.tsx
 lib/
 ├── db.ts                 # pg Pool (separate from backend, avoids ESM/CJS conflict)
 ├── auth.ts               # HMAC-SHA256 token, gz_session cookie
 ├── utils.ts
+├── i18n/
+│   ├── dictionary.ts     # Toàn bộ key VI/EN — tsc validate key tồn tại (DictKey union type)
+│   ├── config.ts         # Locale type, cookie name (gz_locale)
+│   └── server.ts         # getLocale()/getDict() cho Server Components (đọc cookie)
 └── queries/              # All DB queries isolated here — pages never write SQL directly
     ├── overview.ts
     ├── logs.ts
-    ├── deals.ts
+    ├── deals.ts           # getIssueLabels(locale) — issue type labels song ngữ
     ├── analytics.ts
     ├── group-detail.ts   # getGroupDetail(), getInactiveGroups()
-    └── sales-members.ts  # getSalesMembersData() — per-member KPI with LATERAL join
+    ├── sales-members.ts  # getSalesMembersData() — per-member KPI with LATERAL join
+    ├── zenterprise.ts             # CRUD zenterprise_accounts + link candidates
+    ├── zenterprise-live.ts        # insertLiveConversation() — ghi vào group_names/messages/ai_logs/sales_issues thật
+    └── zenterprise-dashboard.ts   # Aggregate overview + per-account stats
 types/
 └── index.ts
 ```
@@ -174,6 +193,7 @@ types/
 - Pool `max: 2` (Supabase free tier: 15 connections total; backend uses max 5)
 - Dynamic route params: `params: Promise<{ groupId: string }>` (Next.js 14+ App Router — must `await params`)
 - `proxy.ts` is the middleware file (NOT `middleware.ts`) — Edge runtime uses Web Crypto API (`crypto.subtle`), not Node `crypto`
+- **i18n (VI/EN, thêm 2026-07-08)**: `lib/i18n/dictionary.ts` chứa toàn bộ chuỗi UI, key kiểu `DictKey` union — TypeScript báo lỗi ngay nếu gọi `t()` với key không tồn tại. Server Components dùng `await getDict()` (đọc cookie `gz_locale`); Client Components dùng `useLocale()` từ `LocaleProvider` (bọc toàn app ở `layout.tsx`). Đổi ngôn ngữ ghi cookie + `router.refresh()` để Server Components re-render theo locale mới. Không dịch nội dung AI-generated động (vd Vietnamese summary/insight text lưu sẵn trong DB từ Gemini) — chỉ dịch "chrome" của UI (tiêu đề, nhãn, nút, header bảng...)
 
 ### Database Schema (Supabase / pgvector)
 
@@ -188,6 +208,7 @@ types/
 | `deals` | Deal tracking per customer per group |
 | `deal_events` | Deal stage change history |
 | `sales_issues` | Quality issues detected by analyzer (open/resolved) |
+| `zenterprise_accounts` | zEnterprise account CRUD — `account_name`, `phone`, `branch`, `role`, `status`, `linked_sender_uid` (optional link tới dữ liệu thật trong `messages`/`ai_logs`) |
 
 All timestamps: `TIMESTAMPTZ`. Group/User IDs: `TEXT` (Zalo IDs are large numbers, string is safer).
 
@@ -349,6 +370,8 @@ INSTANCE_ID           # đặt trên deal-monitor để tách cookie DB key riê
 | `is_answered` + `top_score` tracking | `backend/src/rag/retriever.js` | Accurate unanswered detection via similarity score |
 | `is_gz_member` + `msg_type` on messages | `backend/src/zalo/listener.js` | Enables response time analytics; filters non-text from analyzer |
 | Auto-sync interval 24h | `backend/src/rag/indexer.js` | Reduced from 15min to preserve Gemini embedding quota |
+| zEnterprise Management (2026-07-08) | `admin/app/zenterprise/` | 3 trang: Accounts CRUD, Live (rename của Demo — bỏ hết wording "demo"), Dashboard phân tích (tổng quan + per-account, filter/time range). Data thật, ghi vào bảng production giống hệt luồng thật |
+| VI/EN i18n toàn dashboard (2026-07-08) | `admin/lib/i18n/`, `admin/components/LocaleProvider.tsx` | Toggle ở Sidebar + trang login; cookie `gz_locale`; dịch toàn bộ UI chrome, không dịch nội dung AI-generated động |
 
 ### ⏳ Pending (user action required)
 
