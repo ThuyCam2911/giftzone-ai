@@ -2,8 +2,8 @@ FROM node:20-slim
 
 WORKDIR /app
 
-COPY package.json package-lock.json* ./
-RUN npm install --omit=dev --omit=optional
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev --omit=optional
 
 COPY src ./src
 
