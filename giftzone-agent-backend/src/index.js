@@ -13,6 +13,7 @@ import { startSummaryEngine } from './summary/engine.js';
 import { startDealAnalyzer } from './deal/analyzer.js';
 import { startDailyAlert } from './alert/daily.js';
 import { indexAll, startAutoSync } from './rag/indexer.js';
+import { startOutboundSender } from './outbound/sender.js';
 import { initSchema } from './utils/db.js';
 import { loadConfig, getConfig } from './utils/config.js';
 import { createLogger } from './utils/logger.js';
@@ -81,6 +82,9 @@ async function main() {
       log.info('ENABLE_RAG=false — tắt trả lời RAG docs, Ops Assistant vẫn hoạt động ở nhóm internal');
     }
     listener.start();
+
+    // zEnterprise Inbox: poll outbound_messages ghi từ Dashboard và gửi Zalo thật
+    startOutboundSender(api);
 
     // 5. Khởi động Summary Engine + Drive auto-sync
     log.info('Bước 5/5: Khởi động Summary Engine & Drive auto-sync...');

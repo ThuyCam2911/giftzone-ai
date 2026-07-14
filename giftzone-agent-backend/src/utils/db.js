@@ -201,5 +201,39 @@ export async function initSchema() {
   await query(`ALTER TABLE messages    ADD COLUMN IF NOT EXISTS is_gz_member BOOLEAN  DEFAULT false`);
   await query(`ALTER TABLE messages    ADD COLUMN IF NOT EXISTS msg_type    TEXT      DEFAULT 'text'`);
 
+  // zEnterprise: gán nhóm Zalo vào 1 chi nhánh/cửa hàng để phân tích theo store
+  await query(`ALTER TABLE group_names ADD COLUMN IF NOT EXISTS branch TEXT`);
+
+  // zEnterprise: phân biệt tin nhắn của khách / AI trả lời / nhân viên trả lời tay
+  // (thay cho is_gz_member vốn chỉ biết "người gửi có phải GZ member", không biết ai/AI đang trả lời)
+  await query(`ALTER TABLE messages    ADD COLUMN IF NOT EXISTS responder_type TEXT NOT NULL DEFAULT 'customer'`);
+
+  // zEnterprise: phân loại nhanh loại câu hỏi (order/promotion/complaint/info/other) để thống kê theo store/account
+  await query(`ALTER TABLE messages    ADD COLUMN IF NOT EXISTS question_type  TEXT`);
+
+  // zEnterprise Inbox: hàng đợi tin nhắn 1:1 gửi từ Dashboard — backend poll và gửi qua Zalo thật
+  await query(`
+    CREATE TABLE IF NOT EXISTS outbound_messages (
+      id         BIGSERIAL PRIMARY KEY,
+      thread_id  TEXT NOT NULL,
+      is_direct  BOOLEAN NOT NULL DEFAULT true,
+      text       TEXT NOT NULL,
+      status     TEXT NOT NULL DEFAULT 'pending',
+      error      TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      sent_at    TIMESTAMPTZ
+    )
+  `);
+
+  // zEnterprise Inbox: cờ tạm dừng AI theo từng hội thoại 1:1 khi nhân viên đang trả lời trực tiếp trên Dashboard
+  await query(`
+    CREATE TABLE IF NOT EXISTS conversation_state (
+      thread_id  TEXT PRIMARY KEY,
+      ai_paused  BOOLEAN NOT NULL DEFAULT false,
+      paused_by  TEXT,
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+
   log.info('Schema sẵn sàng ✓');
 }

@@ -11,6 +11,7 @@ import { answer } from '../rag/retriever.js';
 import { handleInternalQuery } from '../ops/assistant.js';
 import { query } from '../utils/db.js';
 import { createLogger } from '../utils/logger.js';
+import { classifyQuestionType } from '../utils/classify.js';
 
 const log = createLogger('Responder');
 
@@ -24,6 +25,18 @@ export class MentionResponder {
     this._lastAsk = new Map();       // senderUid → timestamp lần hỏi cuối
     this._internalGroups = new Set();
     this._internalLoadedAt = 0;
+  }
+
+  async _isAiPaused(threadId) {
+    try {
+      const { rows } = await query(
+        `SELECT ai_paused FROM conversation_state WHERE thread_id = $1`,
+        [threadId]
+      );
+      return rows[0]?.ai_paused === true;
+    } catch {
+      return false; // bảng chưa có / lỗi DB → AI vẫn hoạt động bình thường (fail-open)
+    }
   }
 
   async _loadInternalGroups() {
@@ -45,6 +58,10 @@ export class MentionResponder {
     const now = Date.now();
     if (now - (this._lastAsk.get(senderUid) ?? 0) < COOLDOWN_MS) return;
     this._lastAsk.set(senderUid, now);
+
+    // zEnterprise Inbox: nhân viên đang trả lời tay trên Dashboard cho hội thoại 1:1 này
+    // → AI im lặng hoàn toàn, không nhắc lại "bạn cần hỏi gì"
+    if (isDirect && await this._isAiPaused(groupId)) return;
 
     // Bỏ qua query rỗng
     if (!userQuery || userQuery.trim().length < 2) {
@@ -68,6 +85,7 @@ export class MentionResponder {
             is_answered: true,
             top_score: null,
           });
+          await this._logAiReply(groupId, ops.answer, userQuery);
           return;
         }
         // intent = docs → rơi xuống RAG bên dưới (nếu account này bật RAG docs)
@@ -93,6 +111,7 @@ export class MentionResponder {
         is_answered: result.is_answered,
         top_score: result.top_score,
       });
+      await this._logAiReply(groupId, result.answer, userQuery);
 
     } catch (err) {
       log.error('Pipeline lỗi', err.message);
@@ -121,6 +140,20 @@ export class MentionResponder {
       await this.api.sendMessage({ msg: text }, threadId, type);
     } catch (err) {
       log.error('Gửi tin thất bại', err.message);
+    }
+  }
+
+  // Ghi tin nhắn AI trả lời vào bảng messages (bên cạnh ai_logs) — để zEnterprise
+  // Dashboard đếm được "AI đã trả lời bao nhiêu tin" tách biệt với tin nhắn khách/nhân viên
+  async _logAiReply(groupId, answerText, userQuery) {
+    try {
+      await query(
+        `INSERT INTO messages (group_id, sender_uid, sender_name, content, msg_ts, is_gz_member, msg_type, responder_type, question_type)
+         VALUES ($1, 'ai_agent', $2, $3, NOW(), true, 'text', 'ai', $4)`,
+        [groupId, process.env.AGENT_NAME ?? 'GiftZone AI', answerText, classifyQuestionType(userQuery)]
+      );
+    } catch (err) {
+      log.error('Log AI reply vào messages lỗi', err.message);
     }
   }
 

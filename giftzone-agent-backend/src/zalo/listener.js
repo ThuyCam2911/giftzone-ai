@@ -7,6 +7,7 @@
 import { MessageType } from 'zca-js';
 import { createLogger } from '../utils/logger.js';
 import { query } from '../utils/db.js';
+import { classifyQuestionType } from '../utils/classify.js';
 
 const log = createLogger('Listener');
 
@@ -193,10 +194,13 @@ export class GroupListener {
 
   async _logMessage(groupId, senderUid, senderName, content, ts, isGzMember = false, msgType = 'text') {
     try {
+      // Nhân viên GZ nhắn tay trong group/1:1 = 'human'; còn lại là tin nhắn khách thật
+      const responderType = isGzMember ? 'human' : 'customer';
+      const questionType = isGzMember ? null : classifyQuestionType(content);
       await query(
-        `INSERT INTO messages (group_id, sender_uid, sender_name, content, msg_ts, is_gz_member, msg_type)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-        [groupId, senderUid, senderName, content, ts, isGzMember, msgType]
+        `INSERT INTO messages (group_id, sender_uid, sender_name, content, msg_ts, is_gz_member, msg_type, responder_type, question_type)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+        [groupId, senderUid, senderName, content, ts, isGzMember, msgType, responderType, questionType]
       );
       log.debug(`Logged message from ${senderName} in ${groupId}`);
     } catch (err) {
