@@ -4,6 +4,8 @@ export interface ZEnterpriseAccount {
   id: number;
   account_name: string;
   phone: string | null;
+  email: string | null;
+  has_password: boolean;
   branch: string | null;
   role: 'sales' | 'cs' | 'manager' | 'technical';
   status: 'active' | 'inactive';
@@ -33,12 +35,15 @@ export async function ensureZEnterpriseTable() {
       updated_at          TIMESTAMPTZ DEFAULT NOW()
     )
   `);
+  await query(`ALTER TABLE zenterprise_accounts ADD COLUMN IF NOT EXISTS email TEXT`);
+  await query(`ALTER TABLE zenterprise_accounts ADD COLUMN IF NOT EXISTS password_enc TEXT`);
 }
 
 export async function listZEnterpriseAccounts(): Promise<ZEnterpriseAccount[]> {
   await ensureZEnterpriseTable();
   return query<ZEnterpriseAccount>(
-    `SELECT z.id, z.account_name, z.phone, z.branch, z.role, z.status,
+    `SELECT z.id, z.account_name, z.phone, z.email, z.branch, z.role, z.status,
+            (z.password_enc IS NOT NULL AND z.password_enc != '') AS has_password,
             z.linked_sender_uid,
             (SELECT MAX(m.sender_name) FROM messages m WHERE m.sender_uid = z.linked_sender_uid) AS linked_sender_name,
             z.created_at, z.updated_at

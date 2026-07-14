@@ -23,7 +23,9 @@ const ROLE_STYLE: Record<Role, { bg: string; color: string }> = {
 interface FormState {
   id: number | null;
   account_name: string;
-  phone: string;
+  email: string;
+  password: string;
+  hasPassword: boolean;
   branch: string;
   role: Role;
   status: Status;
@@ -31,7 +33,7 @@ interface FormState {
 }
 
 const EMPTY_FORM: FormState = {
-  id: null, account_name: '', phone: '', branch: '', role: 'sales', status: 'active', linked_sender_uid: '',
+  id: null, account_name: '', email: '', password: '', hasPassword: false, branch: '', role: 'sales', status: 'active', linked_sender_uid: '',
 };
 
 export default function ZEnterpriseAccountsManager({
@@ -61,8 +63,8 @@ export default function ZEnterpriseAccountsManager({
 
   function openEdit(a: ZEnterpriseAccount) {
     setForm({
-      id: a.id, account_name: a.account_name, phone: a.phone ?? '', branch: a.branch ?? '',
-      role: a.role, status: a.status, linked_sender_uid: a.linked_sender_uid ?? '',
+      id: a.id, account_name: a.account_name, email: a.email ?? '', password: '', hasPassword: a.has_password,
+      branch: a.branch ?? '', role: a.role, status: a.status, linked_sender_uid: a.linked_sender_uid ?? '',
     });
     setError(null);
     setFormOpen(true);
@@ -74,7 +76,8 @@ export default function ZEnterpriseAccountsManager({
     setError(null);
     const payload = {
       account_name: form.account_name.trim(),
-      phone: form.phone.trim() || null,
+      email: form.email.trim() || null,
+      password: form.password.trim() || undefined,
       branch: form.branch.trim() || null,
       role: form.role,
       status: form.status,
@@ -91,14 +94,16 @@ export default function ZEnterpriseAccountsManager({
       if (!res.ok) throw new Error();
 
       const linkedCandidate = candidates.find(c => c.sender_uid === form.linked_sender_uid);
+      const { password, ...rest } = payload;
+      const accountFields = { ...rest, has_password: !!password || form.hasPassword };
       if (form.id) {
         setAccounts(prev => prev.map(a => a.id === form.id
-          ? { ...a, ...payload, linked_sender_name: linkedCandidate?.sender_name ?? null }
+          ? { ...a, ...accountFields, linked_sender_name: linkedCandidate?.sender_name ?? null }
           : a));
       } else {
         const data = await res.json();
         setAccounts(prev => [...prev, {
-          id: data.id, ...payload,
+          id: data.id, phone: null, ...accountFields,
           linked_sender_name: linkedCandidate?.sender_name ?? null,
           created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
         }]);
@@ -175,7 +180,7 @@ export default function ZEnterpriseAccountsManager({
                         <UserCircle2 size={18} className="text-gray-300 shrink-0" />
                         <div>
                           <p className="text-sm font-medium text-gray-800">{a.account_name}</p>
-                          {a.phone && <p className="text-xs text-gray-400">{a.phone}</p>}
+                          {a.email && <p className="text-xs text-gray-400">{a.email}</p>}
                         </div>
                       </div>
                     </td>
@@ -245,11 +250,23 @@ export default function ZEnterpriseAccountsManager({
                 />
               </div>
               <div>
-                <label className="text-xs font-medium text-gray-600">{t('ze.accounts.formPhone')}</label>
+                <label className="text-xs font-medium text-gray-600">{t('ze.accounts.formEmail')}</label>
                 <input
-                  value={form.phone}
-                  onChange={e => setForm(f => ({ ...f, phone: e.target.value }))}
-                  placeholder={t('ze.accounts.formPhonePlaceholder')}
+                  type="email"
+                  value={form.email}
+                  onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
+                  placeholder={t('ze.accounts.formEmailPlaceholder')}
+                  className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-gray-600">{t('ze.accounts.formPassword')}</label>
+                <input
+                  type="password"
+                  value={form.password}
+                  onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
+                  placeholder={form.hasPassword ? t('ze.accounts.formPasswordKeepPlaceholder') : t('ze.accounts.formPasswordPlaceholder')}
+                  autoComplete="new-password"
                   className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
                 />
               </div>

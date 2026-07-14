@@ -2,7 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import Sidebar from '@/components/Sidebar';
 import ZEnterpriseDashboard from '@/components/ZEnterpriseDashboard';
-import { getZDashOverview, getZDashAccounts } from '@/lib/queries/zenterprise-dashboard';
+import { getZDashOverview, getZDashAccounts, getZDashChatbot, getZDashMonitor } from '@/lib/queries/zenterprise-dashboard';
 import { defaultDateRange } from '@/lib/utils';
 import { getDict } from '@/lib/i18n/server';
 import { PieChart } from 'lucide-react';
@@ -19,11 +19,13 @@ export default async function ZEnterpriseDashboardPage({
   const to   = params.to   ?? defaults.to;
   const selectedAccountId = params.account ? Number(params.account) : null;
 
-  let overview, accounts;
+  let overview, accounts, chatbot, monitor;
   try {
-    [overview, accounts] = await Promise.all([
+    [overview, accounts, chatbot, monitor] = await Promise.all([
       getZDashOverview(from, to),
       getZDashAccounts(from, to),
+      getZDashChatbot(from, to),
+      getZDashMonitor(from, to),
     ]);
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -55,6 +57,8 @@ export default async function ZEnterpriseDashboardPage({
           <ZEnterpriseDashboard
             overview={overview}
             accounts={accounts}
+            chatbot={chatbot}
+            monitor={monitor}
             from={from}
             to={to}
             selectedAccountId={selectedAccountId}

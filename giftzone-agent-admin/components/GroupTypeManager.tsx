@@ -6,6 +6,7 @@ interface GroupRow {
   group_id: string;
   name: string;
   group_type: string;
+  branch: string | null;
   updated_at: string;
 }
 
@@ -13,6 +14,19 @@ export default function GroupTypeManager({ groups: initial }: { groups: GroupRow
   const { t } = useLocale();
   const [groups, setGroups] = useState(initial);
   const [saving, setSaving] = useState<string | null>(null);
+  const [branchDraft, setBranchDraft] = useState<Record<string, string>>({});
+
+  async function saveBranch(groupId: string) {
+    const branch = (branchDraft[groupId] ?? '').trim();
+    setSaving(groupId);
+    await fetch('/api/groups', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ group_id: groupId, branch }),
+    });
+    setGroups(gs => gs.map(g => g.group_id === groupId ? { ...g, branch: branch || null } : g));
+    setSaving(null);
+  }
 
   const TYPE_CONFIG = {
     customer: { label: t('groups.typeCustomer'), bg: '#f0fdf4', color: '#166534', desc: t('groups.typeCustomerDesc') },
@@ -71,6 +85,24 @@ export default function GroupTypeManager({ groups: initial }: { groups: GroupRow
             <div className="w-full">
               <p className="text-xs" style={{ color: cfg.color }}>{cfg.desc}</p>
             </div>
+            {g.group_type === 'customer' && (
+              <div className="w-full flex items-center gap-2">
+                <input
+                  value={branchDraft[g.group_id] ?? g.branch ?? ''}
+                  onChange={e => setBranchDraft(d => ({ ...d, [g.group_id]: e.target.value }))}
+                  placeholder={t('groups.branchPlaceholder')}
+                  className="flex-1 text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-green-400"
+                />
+                <button
+                  onClick={() => saveBranch(g.group_id)}
+                  disabled={saving === g.group_id}
+                  className="text-xs font-medium px-3 py-1.5 rounded-lg text-white disabled:opacity-50 shrink-0"
+                  style={{ background: '#02AD64' }}
+                >
+                  {saving === g.group_id ? t('common.saving') : t('groups.saveBranch')}
+                </button>
+              </div>
+            )}
           </div>
         );
       })}

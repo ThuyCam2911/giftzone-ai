@@ -6,7 +6,7 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev", "--", "-p", "3001"],
       "port": 3001,
-      "cwd": "/Users/thuycam/Desktop/GiftZone/giftzone-agent/dashboard"
+      "cwd": "/Users/thuycam/Desktop/GiftZone/giftzone-agent/giftzone-agent-admin"
     }
   ]
 }

@@ -13,6 +13,7 @@ interface GroupRow {
   group_id: string;
   name: string;
   group_type: string;
+  branch: string | null;
   updated_at: string;
 }
 
@@ -30,7 +31,7 @@ export default async function GroupsPage() {
   const { t } = await getDict();
   const [groups, savedMembers, candidates, inactiveGroups] = await Promise.all([
     query<GroupRow>(
-      `SELECT group_id, name, group_type, updated_at FROM group_names WHERE COALESCE(group_type,'customer') != 'direct' ORDER BY name`,
+      `SELECT group_id, name, group_type, branch, updated_at FROM group_names WHERE COALESCE(group_type,'customer') != 'direct' ORDER BY name`,
     ),
     query<MemberRow>(
       `SELECT sender_uid, sender_name, role FROM gz_members ORDER BY sender_name`,
