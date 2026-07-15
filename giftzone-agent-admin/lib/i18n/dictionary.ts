@@ -356,7 +356,7 @@ const vi = {
 
   // ── zEnterprise: Live ───────────────────────────────────────────────────
   'ze.live.title': 'zEnterprise Live',
-  'ze.live.subtitle': 'Mô phỏng một hội thoại Zalo thật, dữ liệu được đồng bộ & phân tích ngay trên Dashboard.',
+  'ze.live.subtitle': 'Hội thoại thật với khách hàng qua Zalo — gửi tin ở đây là gửi thật. Có kèm vài đoạn chat DEMO để dễ hình dung khi trình bày.',
   'ze.live.scenarioLabel': 'Kịch bản',
   'ze.live.scenarioOrder': 'Khách đặt combo qua Zalo',
   'ze.live.scenarioComplaint': 'Khách phàn nàn giao hàng trễ',
@@ -806,7 +806,7 @@ const en: Record<DictKey, string> = {
 
   // ── zEnterprise: Live ───────────────────────────────────────────────────
   'ze.live.title': 'zEnterprise Live',
-  'ze.live.subtitle': 'Simulate a real Zalo conversation — data is synced & analyzed live on the Dashboard.',
+  'ze.live.subtitle': 'Real customer conversations over Zalo — sending here sends for real. A few DEMO threads are seeded in for easy walkthroughs.',
   'ze.live.scenarioLabel': 'Scenario',
   'ze.live.scenarioOrder': 'Customer orders a combo via Zalo',
   'ze.live.scenarioComplaint': 'Customer complains about late delivery',

@@ -17,7 +17,6 @@ import {
   Sparkles,
   Building2,
   PieChart,
-  Inbox,
 } from 'lucide-react';
 import { useLocale } from '@/components/LocaleProvider';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
@@ -31,7 +30,6 @@ const navGroups: NavGroup[] = [
     labelKey: 'sidebar.groupZenterprise',
     items: [
       { href: '/zenterprise/accounts',  labelKey: 'sidebar.zenterpriseAccounts',  icon: Building2 },
-      { href: '/zenterprise/inbox',     labelKey: 'sidebar.zenterpriseInbox',     icon: Inbox },
       { href: '/zenterprise/live',      labelKey: 'sidebar.zenterpriseLive',      icon: Sparkles },
       { href: '/zenterprise/dashboard', labelKey: 'sidebar.zenterpriseDashboard', icon: PieChart },
     ],
