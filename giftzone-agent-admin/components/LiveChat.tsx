@@ -1,8 +1,8 @@
 'use client';
 
-import { useMemo, useRef, useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { Send, RefreshCw, Sparkles, ArrowRight, User, Headset, Loader2 } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
+import { Send, Bot, UserCheck, Sparkles, Loader2, Plus, MessageCircle } from 'lucide-react';
 import { useLocale } from '@/components/LocaleProvider';
 
 type Role = 'customer' | 'employee';
@@ -10,10 +10,9 @@ type Role = 'customer' | 'employee';
 interface ChatMsg {
   id: string;
   role: Role;
-  senderId: string;   // live-customer | live-employee-a | live-employee-b
+  senderId: string;
   senderName: string;
   text: string;
-  system?: boolean;   // divider message (e.g. handoff notice)
 }
 
 interface ScenarioDef {
@@ -41,10 +40,6 @@ const SCENARIOS: ScenarioDef[] = [
         vi: 'Cho mình đặt 2 combo, giao tới 12 Nguyễn Trãi nhé.',
         en: "I'd like to order 2 combos, delivered to 12 Nguyen Trai please.",
       } },
-      { role: 'employee', text: {
-        vi: 'Dạ em lên đơn 2 combo giao 12 Nguyễn Trãi ngay ạ, khoảng 20 phút sẽ tới.',
-        en: "Sure, placing your order for 2 combos to 12 Nguyen Trai now — about 20 minutes.",
-      } },
     ],
   },
   {
@@ -64,10 +59,6 @@ const SCENARIOS: ScenarioDef[] = [
         vi: 'Đây là lần thứ 2 bị trễ rồi đó, mình khá thất vọng.',
         en: "This is the second time it's been late, I'm pretty disappointed.",
       } },
-      { role: 'employee', text: {
-        vi: 'Dạ em rất xin lỗi vì trải nghiệm không tốt này, em sẽ báo quản lý cửa hàng xử lý ngay và tặng chị voucher cho lần sau ạ.',
-        en: "I sincerely apologize for the poor experience — I'll flag this to the branch manager right away and send you a voucher for next time.",
-      } },
     ],
   },
   {
@@ -83,17 +74,14 @@ const SCENARIOS: ScenarioDef[] = [
         vi: 'Dạ có ạ! Chị tích điểm mỗi đơn hàng, đủ 500 điểm đổi được 1 phần gà miễn phí ạ.',
         en: 'Yes! You earn points on every order — 500 points gets you a free chicken portion.',
       } },
-      { role: 'customer', text: {
-        vi: 'Vậy đăng ký thành viên sao nè?',
-        en: 'How do I sign up for membership then?',
-      } },
-      { role: 'employee', text: {
-        vi: 'Dạ chị chỉ cần chat với tụi em qua Zalo này là tự động được ghi nhận thành viên rồi ạ, không cần app riêng.',
-        en: "Just chatting with us here on Zalo automatically registers you as a member — no separate app needed.",
-      } },
     ],
   },
 ];
+
+const AI_AUTO_REPLY = {
+  vi: 'Dạ em đã ghi nhận, GiftZone AI sẽ hỗ trợ mình ngay ạ. Mình chờ chút xíu nhé! 🤖',
+  en: "Got it — GiftZone AI is on it, just a moment please! 🤖",
+};
 
 let seq = 0;
 function nextId() {
@@ -101,113 +89,126 @@ function nextId() {
   return `m${Date.now()}${seq}`;
 }
 
+interface LiveThread {
+  id: string;
+  scenarioKey: string | null;   // null = blank thread (custom name)
+  customName?: string;
+  messages: ChatMsg[];
+  aiMode: boolean;
+  analyzed: boolean;
+  groupId?: string;
+}
+
+function scriptToMessages(s: ScenarioDef, locale: 'vi' | 'en', customerName: string, employeeName: string): ChatMsg[] {
+  return s.script.map(line => ({
+    id: nextId(),
+    role: line.role,
+    senderId: line.role === 'customer' ? 'live-customer' : 'live-employee',
+    senderName: line.role === 'customer' ? customerName : employeeName,
+    text: line.text[locale],
+  }));
+}
+
 export default function LiveChat() {
-  const router = useRouter();
   const { t, locale } = useLocale();
 
   const CUSTOMER_NAME = locale === 'en' ? 'Customer — Nguyen Thi Lan' : 'Khách hàng — Nguyễn Thị Lan';
-  const EMPLOYEE_A = locale === 'en' ? 'Staff A — Nguyen Trai Branch' : 'Nhân viên A — CH Nguyễn Trãi';
-  const EMPLOYEE_B = locale === 'en' ? 'Staff B — Nguyen Trai Branch' : 'Nhân viên B — CH Nguyễn Trãi';
+  const EMPLOYEE_NAME = locale === 'en' ? 'GiftZone Staff' : 'Nhân viên GiftZone';
 
-  function scriptToMessages(s: ScenarioDef): ChatMsg[] {
-    return s.script.map(line => ({
-      id: nextId(),
-      role: line.role,
-      senderId: line.role === 'customer' ? 'live-customer' : 'live-employee-a',
-      senderName: line.role === 'customer' ? CUSTOMER_NAME : EMPLOYEE_A,
-      text: line.text[locale],
-    }));
-  }
-
-  const [scenario, setScenario] = useState<ScenarioDef>(SCENARIOS[0]);
-  const [messages, setMessages] = useState<ChatMsg[]>(() => scriptToMessages(SCENARIOS[0]));
-  const [handoffDone, setHandoffDone] = useState(false);
+  const [threads, setThreads] = useState<LiveThread[]>(() =>
+    SCENARIOS.map(s => ({
+      id: s.key,
+      scenarioKey: s.key,
+      messages: scriptToMessages(s, locale, CUSTOMER_NAME, EMPLOYEE_NAME),
+      aiMode: true,
+      analyzed: false,
+    })),
+  );
+  const [selected, setSelected] = useState<string | null>(SCENARIOS[0]?.key ?? null);
   const [composerRole, setComposerRole] = useState<Role>('customer');
   const [draft, setDraft] = useState('');
   const [analyzing, setAnalyzing] = useState(false);
-  const [statusText, setStatusText] = useState('');
   const [error, setError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
+  const selectedThread = threads.find(th => th.id === selected) ?? null;
+
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
-  }, [messages]);
+  }, [selectedThread?.messages.length, selected]);
 
-  // re-render script text when language toggles mid-session for the still-scripted (unedited) messages
-  useEffect(() => {
-    setMessages(scriptToMessages(scenario));
-    setHandoffDone(false);
-    setComposerRole('customer');
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [locale]);
+  function threadName(th: LiveThread): string {
+    if (th.scenarioKey) {
+      const s = SCENARIOS.find(x => x.key === th.scenarioKey);
+      if (s) return t(s.labelKey);
+    }
+    return th.customName ?? (locale === 'en' ? 'New chat' : 'Đoạn chat mới');
+  }
 
-  function pickScenario(s: ScenarioDef) {
-    setScenario(s);
-    setMessages(scriptToMessages(s));
-    setHandoffDone(false);
+  function createThread() {
+    const id = nextId();
+    const th: LiveThread = { id, scenarioKey: null, customName: locale === 'en' ? 'New chat' : 'Đoạn chat mới', messages: [], aiMode: true, analyzed: false };
+    setThreads(prev => [th, ...prev]);
+    setSelected(id);
     setComposerRole('customer');
     setError(null);
   }
 
-  function currentEmployeeName() {
-    return handoffDone ? EMPLOYEE_B : EMPLOYEE_A;
+  function selectThread(id: string) {
+    setSelected(id);
+    setComposerRole('customer');
+    setError(null);
   }
-  function currentEmployeeId() {
-    return handoffDone ? 'live-employee-b' : 'live-employee-a';
+
+  function toggleAiMode(id: string) {
+    setThreads(prev => prev.map(th => th.id === id ? { ...th, aiMode: !th.aiMode } : th));
+  }
+
+  function appendMessage(threadId: string, msg: ChatMsg) {
+    setThreads(prev => prev.map(th => th.id === threadId ? { ...th, messages: [...th.messages, msg] } : th));
   }
 
   function sendMessage() {
-    if (!draft.trim()) return;
+    if (!draft.trim() || !selectedThread) return;
+    const threadId = selectedThread.id;
     const msg: ChatMsg = {
       id: nextId(),
       role: composerRole,
-      senderId: composerRole === 'customer' ? 'live-customer' : currentEmployeeId(),
-      senderName: composerRole === 'customer' ? CUSTOMER_NAME : currentEmployeeName(),
+      senderId: composerRole === 'customer' ? 'live-customer' : 'live-employee',
+      senderName: composerRole === 'customer' ? CUSTOMER_NAME : EMPLOYEE_NAME,
       text: draft.trim(),
     };
-    setMessages(prev => [...prev, msg]);
+    appendMessage(threadId, msg);
     setDraft('');
+
+    if (composerRole === 'customer' && selectedThread.aiMode) {
+      setTimeout(() => {
+        appendMessage(threadId, {
+          id: nextId(),
+          role: 'employee',
+          senderId: 'live-ai',
+          senderName: locale === 'en' ? 'GiftZone AI' : 'GiftZone AI',
+          text: AI_AUTO_REPLY[locale],
+        });
+      }, 700);
+    }
   }
 
-  function triggerHandoff() {
-    if (handoffDone) return;
-    setMessages(prev => [
-      ...prev,
-      {
-        id: nextId(),
-        role: 'employee',
-        senderId: 'system',
-        senderName: 'system',
-        text: `🔄 ${EMPLOYEE_A} ${t('ze.live.handoffNotice')} ${EMPLOYEE_B}. ${t('ze.live.handoffNoticeEnd')}`,
-        system: true,
-      },
-    ]);
-    setHandoffDone(true);
-  }
-
-  const employeeTurns = useMemo(() => messages.filter(m => m.role === 'employee' && !m.system).length, [messages]);
-  const canFinish = messages.filter(m => !m.system).length >= 4;
-
-  async function finishAndAnalyze() {
-    if (!canFinish || analyzing) return;
+  async function analyzeThread() {
+    if (!selectedThread || analyzing) return;
+    const realMessages = selectedThread.messages.filter(m => m.text.trim());
+    if (realMessages.length < 2) {
+      setError(t('ze.live.finishNeedMore'));
+      return;
+    }
     setAnalyzing(true);
     setError(null);
 
-    const steps = [t('ze.live.syncing'), t('ze.live.analyzing')];
-    let stepIdx = 0;
-    setStatusText(steps[0]);
-    const interval = setInterval(() => {
-      stepIdx = (stepIdx + 1) % steps.length;
-      setStatusText(steps[stepIdx]);
-    }, 1100);
-
     try {
       const payload = {
-        scenarioLabel: t(scenario.labelKey),
-        handoffOccurred: handoffDone,
-        messages: messages
-          .filter(m => !m.system)
-          .map(m => ({ senderId: m.senderId, senderName: m.senderName, text: m.text })),
+        scenarioLabel: threadName(selectedThread),
+        handoffOccurred: false,
+        messages: realMessages.map(m => ({ senderId: m.senderId, senderName: m.senderName, text: m.text })),
       };
       const res = await fetch('/api/zenterprise/live/analyze', {
         method: 'POST',
@@ -219,161 +220,165 @@ export default function LiveChat() {
         throw new Error(body.error ?? t('ze.live.analyzeFailed'));
       }
       const data = await res.json();
-      clearInterval(interval);
-      router.push(`/groups/${data.groupId}`);
+      setThreads(prev => prev.map(th => th.id === selectedThread.id ? { ...th, analyzed: true, groupId: data.groupId } : th));
     } catch (e) {
-      clearInterval(interval);
-      setAnalyzing(false);
       setError(e instanceof Error ? e.message : t('ze.live.analyzeFailed'));
+    } finally {
+      setAnalyzing(false);
     }
   }
 
   return (
-    <div className="max-w-3xl mx-auto space-y-4">
-      {/* Scenario picker */}
-      <div>
-        <p className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-2">{t('ze.live.scenarioLabel')}</p>
-        <div className="flex flex-wrap gap-2">
-          {SCENARIOS.map(s => (
-            <button
-              key={s.key}
-              onClick={() => pickScenario(s)}
-              className="px-3 py-1.5 rounded-full text-xs font-medium border transition-colors"
-              style={
-                scenario.key === s.key
-                  ? { background: '#e6f9f1', color: '#018a4e', borderColor: '#02AD64' }
-                  : { background: 'white', color: '#6b7280', borderColor: '#e5e7eb' }
-              }
-            >
-              {t(s.chipKey)} {t(s.labelKey)}
-            </button>
-          ))}
+    <div className="flex gap-4 min-w-0" style={{ height: 620 }}>
+      {/* Thread list */}
+      <div className="w-72 shrink-0 bg-white rounded-xl border border-gray-200 flex flex-col overflow-hidden">
+        <div className="px-3 py-2.5 border-b border-gray-100 flex items-center justify-between">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{t('ze.live.threadListTitle')}</p>
+          <button
+            onClick={createThread}
+            className="flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-lg text-white"
+            style={{ background: '#02AD64' }}
+          >
+            <Plus size={12} /> {t('ze.live.newChat')}
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto">
+          {threads.map(th => {
+            const last = th.messages[th.messages.length - 1];
+            return (
+              <button
+                key={th.id}
+                onClick={() => selectThread(th.id)}
+                className={`w-full text-left px-4 py-3 border-b border-gray-50 hover:bg-gray-50 transition-colors ${selected === th.id ? 'bg-green-50/60' : ''}`}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-sm font-medium text-gray-800 truncate">{threadName(th)}</p>
+                  {th.aiMode ? (
+                    <Bot size={13} className="text-orange-400 shrink-0" />
+                  ) : (
+                    <UserCheck size={13} className="text-blue-500 shrink-0" />
+                  )}
+                </div>
+                <p className="text-xs text-gray-400 truncate mt-0.5">{last ? last.text : '—'}</p>
+                {th.analyzed && (
+                  <span className="inline-block mt-1 text-[10px] px-1.5 py-0.5 rounded-full bg-green-50 text-green-700 font-medium">
+                    {t('ze.live.analyzed')}
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </div>
       </div>
 
-      {/* Employee status bar */}
-      <div className="flex items-center justify-between bg-white rounded-xl border border-gray-200 px-4 py-2.5">
-        <div className="flex items-center gap-2 text-xs text-gray-500">
-          <Headset size={14} className={handoffDone ? 'text-orange-500' : 'text-[#02AD64]'} />
-          <span>{t('ze.live.currentAccount')}</span>
-          <span className="font-semibold text-gray-800">{currentEmployeeName()}</span>
-          {handoffDone && (
-            <span className="text-[10px] px-2 py-0.5 rounded-full bg-orange-50 text-orange-600 font-medium">{t('ze.live.handedOff')}</span>
-          )}
-        </div>
-        <button
-          onClick={triggerHandoff}
-          disabled={handoffDone || employeeTurns < 1}
-          className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg border transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-          style={{ borderColor: '#FF6900', color: '#FF6900' }}
-        >
-          <RefreshCw size={12} />
-          {t('ze.live.simulateHandoff')}
-        </button>
-      </div>
-
-      {/* Chat window */}
-      <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
-        <div ref={scrollRef} className="h-[420px] overflow-y-auto px-4 py-4 space-y-3" style={{ background: '#F7F8FA' }}>
-          {messages.map(m =>
-            m.system ? (
-              <div key={m.id} className="flex justify-center">
-                <span className="text-[11px] text-center px-3 py-1.5 rounded-full bg-orange-50 text-orange-700 max-w-md">
-                  {m.text}
-                </span>
+      {/* Thread detail */}
+      <div className="flex-1 min-w-0 bg-white rounded-xl border border-gray-200 flex flex-col">
+        {selectedThread ? (
+          <>
+            <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between gap-3">
+              <p className="text-sm font-semibold text-gray-800 truncate">{threadName(selectedThread)}</p>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  onClick={() => toggleAiMode(selectedThread.id)}
+                  className="flex items-center gap-2 text-xs font-medium px-3 py-1.5 rounded-lg border transition-colors"
+                  style={selectedThread.aiMode
+                    ? { background: '#fff3eb', color: '#c2410c', borderColor: '#fed7aa' }
+                    : { background: '#eff6ff', color: '#1d4ed8', borderColor: '#bfdbfe' }}
+                >
+                  {selectedThread.aiMode ? <Bot size={13} /> : <UserCheck size={13} />}
+                  {selectedThread.aiMode ? t('ze.live.aiOn') : t('ze.live.aiOff')}
+                </button>
+                <button
+                  onClick={analyzeThread}
+                  disabled={analyzing}
+                  className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg text-white disabled:opacity-50"
+                  style={{ background: 'linear-gradient(135deg, #02AD64 0%, #018a4e 100%)' }}
+                >
+                  {analyzing ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
+                  {t('ze.live.analyzeBtn')}
+                </button>
               </div>
-            ) : (
-              <div key={m.id} className={`flex ${m.role === 'employee' ? 'justify-end' : 'justify-start'}`}>
-                <div className="max-w-[75%]">
-                  <p className={`text-[10px] text-gray-400 mb-1 ${m.role === 'employee' ? 'text-right' : ''}`}>
-                    {m.senderName}
-                  </p>
-                  <div
-                    className="px-3.5 py-2 rounded-2xl text-sm leading-snug"
-                    style={
-                      m.role === 'employee'
-                        ? { background: '#02AD64', color: 'white', borderBottomRightRadius: 4 }
-                        : { background: 'white', color: '#1f2937', border: '1px solid #e5e7eb', borderBottomLeftRadius: 4 }
-                    }
-                  >
-                    {m.text}
+            </div>
+
+            {selectedThread.analyzed && selectedThread.groupId && (
+              <div className="mx-4 mt-3 bg-green-50 border border-green-100 rounded-lg px-3 py-2 text-xs text-green-700 flex items-center justify-between gap-2">
+                <span>{t('ze.live.analyzed')}</span>
+                <Link href={`/groups/${selectedThread.groupId}`} className="font-semibold underline shrink-0">
+                  {t('ze.live.viewResult')}
+                </Link>
+              </div>
+            )}
+            {error && <p className="mx-4 mt-3 text-xs text-red-500">{error}</p>}
+
+            <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-4 space-y-3" style={{ background: '#F7F8FA' }}>
+              {selectedThread.messages.length === 0 && (
+                <div className="h-full flex flex-col items-center justify-center text-gray-300 gap-2">
+                  <MessageCircle size={28} />
+                  <p className="text-xs">{t('ze.live.selectThread')}</p>
+                </div>
+              )}
+              {selectedThread.messages.map(m => (
+                <div key={m.id} className={`flex ${m.role === 'employee' ? 'justify-end' : 'justify-start'}`}>
+                  <div className="max-w-[75%]">
+                    <p className={`text-[10px] text-gray-400 mb-1 ${m.role === 'employee' ? 'text-right' : ''}`}>
+                      {m.senderName}
+                    </p>
+                    <div
+                      className="px-3.5 py-2 rounded-2xl text-sm leading-snug"
+                      style={
+                        m.role === 'employee'
+                          ? { background: m.senderId === 'live-ai' ? '#FF6900' : '#02AD64', color: 'white', borderBottomRightRadius: 4 }
+                          : { background: 'white', color: '#1f2937', border: '1px solid #e5e7eb', borderBottomLeftRadius: 4 }
+                      }
+                    >
+                      {m.text}
+                    </div>
                   </div>
                 </div>
+              ))}
+            </div>
+
+            <div className="border-t border-gray-100 p-3">
+              <div className="flex items-center gap-2 mb-2">
+                <button
+                  onClick={() => setComposerRole('customer')}
+                  className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-lg font-medium transition-colors"
+                  style={composerRole === 'customer' ? { background: '#eff6ff', color: '#2563eb' } : { color: '#9ca3af' }}
+                >
+                  {t('ze.live.customer')}
+                </button>
+                <button
+                  onClick={() => setComposerRole('employee')}
+                  className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-lg font-medium transition-colors"
+                  style={composerRole === 'employee' ? { background: '#e6f9f1', color: '#018a4e' } : { color: '#9ca3af' }}
+                >
+                  {EMPLOYEE_NAME}
+                </button>
               </div>
-            ),
-          )}
-        </div>
-
-        {/* Composer */}
-        <div className="border-t border-gray-100 p-3">
-          <div className="flex items-center gap-2 mb-2">
-            <button
-              onClick={() => setComposerRole('customer')}
-              className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-lg font-medium transition-colors"
-              style={composerRole === 'customer' ? { background: '#eff6ff', color: '#2563eb' } : { color: '#9ca3af' }}
-            >
-              <User size={12} /> {t('ze.live.customer')}
-            </button>
-            <button
-              onClick={() => setComposerRole('employee')}
-              className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-lg font-medium transition-colors"
-              style={composerRole === 'employee' ? { background: '#e6f9f1', color: '#018a4e' } : { color: '#9ca3af' }}
-            >
-              <Headset size={12} /> {currentEmployeeName()}
-            </button>
+              <div className="flex items-center gap-2">
+                <input
+                  value={draft}
+                  onChange={e => setDraft(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && sendMessage()}
+                  placeholder={composerRole === 'customer' ? t('ze.live.customerPlaceholder') : t('ze.live.employeePlaceholder')}
+                  className="flex-1 text-sm px-3.5 py-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-[#02AD64]"
+                />
+                <button
+                  onClick={sendMessage}
+                  disabled={!draft.trim()}
+                  className="w-10 h-10 rounded-xl flex items-center justify-center text-white disabled:opacity-40"
+                  style={{ background: '#02AD64' }}
+                >
+                  <Send size={16} />
+                </button>
+              </div>
+            </div>
+          </>
+        ) : (
+          <div className="flex-1 flex items-center justify-center text-sm text-gray-400">
+            {t('ze.live.selectThread')}
           </div>
-          <div className="flex items-center gap-2">
-            <input
-              value={draft}
-              onChange={e => setDraft(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && sendMessage()}
-              placeholder={composerRole === 'customer' ? t('ze.live.customerPlaceholder') : t('ze.live.employeePlaceholder')}
-              className="flex-1 text-sm px-3.5 py-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-[#02AD64]"
-            />
-            <button
-              onClick={sendMessage}
-              disabled={!draft.trim()}
-              className="w-10 h-10 rounded-xl flex items-center justify-center text-white disabled:opacity-40"
-              style={{ background: '#02AD64' }}
-            >
-              <Send size={16} />
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Finish CTA */}
-      <div className="bg-white rounded-2xl border border-gray-200 px-5 py-4 flex items-center justify-between gap-4">
-        <div>
-          <p className="text-sm font-semibold text-gray-800 flex items-center gap-1.5">
-            <Sparkles size={14} className="text-[#02AD64]" />
-            {t('ze.live.finishTitle')}
-          </p>
-          <p className="text-xs text-gray-400 mt-0.5">
-            {canFinish
-              ? t('ze.live.finishReady')
-              : `${4 - messages.filter(m => !m.system).length} ${t('ze.live.finishNeedMore')}`}
-          </p>
-          {error && <p className="text-xs text-red-500 mt-1">{error}</p>}
-        </div>
-        <button
-          onClick={finishAndAnalyze}
-          disabled={!canFinish || analyzing}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-white shrink-0 disabled:opacity-40 disabled:cursor-not-allowed transition-opacity"
-          style={{ background: 'linear-gradient(135deg, #02AD64 0%, #018a4e 100%)' }}
-        >
-          {analyzing ? (
-            <>
-              <Loader2 size={15} className="animate-spin" />
-              {statusText}
-            </>
-          ) : (
-            <>
-              {t('ze.live.viewDashboard')}
-              <ArrowRight size={15} />
-            </>
-          )}
-        </button>
+        )}
       </div>
     </div>
   );

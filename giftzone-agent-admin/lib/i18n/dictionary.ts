@@ -379,6 +379,14 @@ const vi = {
   'ze.live.analyzeFailed': 'Phân tích thất bại',
   'ze.live.handoffNotice': 'đã nghỉ việc — công ty thu hồi tài khoản zEnterprise và gán cho',
   'ze.live.handoffNoticeEnd': 'Toàn bộ lịch sử hội thoại được giữ nguyên.',
+  'ze.live.threadListTitle': 'Đoạn chat',
+  'ze.live.newChat': 'Đoạn chat mới',
+  'ze.live.aiOn': 'AI đang trả lời',
+  'ze.live.aiOff': 'Nhân viên đang trả lời',
+  'ze.live.analyzeBtn': 'Phân tích',
+  'ze.live.analyzed': 'Đã phân tích',
+  'ze.live.viewResult': 'Xem chi tiết →',
+  'ze.live.selectThread': 'Chọn hoặc tạo một đoạn chat để bắt đầu.',
 
   // ── zEnterprise: Dashboard ──────────────────────────────────────────────
   'ze.dash.title': 'Dashboard phân tích zEnterprise',
@@ -821,6 +829,14 @@ const en: Record<DictKey, string> = {
   'ze.live.analyzeFailed': 'Analysis failed',
   'ze.live.handoffNotice': 'has left — the company revoked their zEnterprise account and reassigned it to',
   'ze.live.handoffNoticeEnd': 'The full conversation history is preserved.',
+  'ze.live.threadListTitle': 'Conversations',
+  'ze.live.newChat': 'New chat',
+  'ze.live.aiOn': 'AI replying',
+  'ze.live.aiOff': 'Staff replying',
+  'ze.live.analyzeBtn': 'Analyze',
+  'ze.live.analyzed': 'Analyzed',
+  'ze.live.viewResult': 'View details →',
+  'ze.live.selectThread': 'Select or start a conversation to begin.',
 
   // ── zEnterprise: Dashboard ──────────────────────────────────────────────
   'ze.dash.title': 'zEnterprise Analytics Dashboard',

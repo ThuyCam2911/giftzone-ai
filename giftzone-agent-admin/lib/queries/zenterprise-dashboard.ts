@@ -48,16 +48,22 @@ export interface ZDashAccountRow {
   messages: number;
   ai_queries: number;
   open_issues: number;
-  quality_score: number | null; // avg sales_issues-based score across their groups, null if no data
+  quality_score: number | null; // heuristic 0-100, null if no data: 100 trừ điểm theo tỉ lệ open_issues/messages
+  group_ids: string[]; // groups account này đã nhắn trong khoảng from/to — dùng để scope các chart khác theo filter account
 }
 
 function toVNDateKey(d: Date): string {
   return d.toLocaleDateString('sv-SE', { timeZone: 'Asia/Ho_Chi_Minh' });
 }
 
-export async function getZDashOverview(from: string, to: string): Promise<ZDashOverview> {
+// groupIds: khi != null, giới hạn toàn bộ số liệu (kể cả daysChart) về các group của account đang chọn ở filter trên cùng
+export async function getZDashOverview(from: string, to: string, groupIds?: string[] | null): Promise<ZDashOverview> {
   const fromTs = new Date(`${from}T00:00:00+07:00`);
   const toTs   = new Date(`${to}T23:59:59+07:00`);
+  const scoped = groupIds != null;
+  if (scoped && groupIds!.length === 0) {
+    return { conversations: 0, messages: 0, aiQueries: 0, openIssues: 0, storesActive: 0, distinctCustomers: 0, daysChart: [] };
+  }
 
   const [conv, msgs, aiQ, issues, chart, stores, customers] = await Promise.all([
     query<{ count: string }>(
@@ -65,37 +71,45 @@ export async function getZDashOverview(from: string, to: string): Promise<ZDashO
        FROM messages m
        LEFT JOIN group_names gn ON gn.group_id = m.group_id
        WHERE m.msg_ts >= $1 AND m.msg_ts <= $2
-         AND COALESCE(gn.group_type,'customer') NOT IN ('internal','direct')`,
-      [fromTs, toTs],
+         AND COALESCE(gn.group_type,'customer') NOT IN ('internal','direct')
+         ${scoped ? 'AND m.group_id = ANY($3::text[])' : ''}`,
+      scoped ? [fromTs, toTs, groupIds] : [fromTs, toTs],
     ),
     query<{ count: string }>(
-      `SELECT COUNT(*) AS count FROM messages WHERE msg_ts >= $1 AND msg_ts <= $2`,
-      [fromTs, toTs],
+      `SELECT COUNT(*) AS count FROM messages WHERE msg_ts >= $1 AND msg_ts <= $2
+       ${scoped ? 'AND group_id = ANY($3::text[])' : ''}`,
+      scoped ? [fromTs, toTs, groupIds] : [fromTs, toTs],
     ),
     query<{ count: string }>(
-      `SELECT COUNT(*) AS count FROM ai_logs WHERE created_at >= $1 AND created_at <= $2`,
-      [fromTs, toTs],
+      `SELECT COUNT(*) AS count FROM ai_logs WHERE created_at >= $1 AND created_at <= $2
+       ${scoped ? 'AND group_id = ANY($3::text[])' : ''}`,
+      scoped ? [fromTs, toTs, groupIds] : [fromTs, toTs],
     ),
     query<{ count: string }>(
-      `SELECT COUNT(*) AS count FROM sales_issues WHERE status = 'open' AND detected_at >= $1 AND detected_at <= $2`,
-      [fromTs, toTs],
+      `SELECT COUNT(*) AS count FROM sales_issues WHERE status = 'open' AND detected_at >= $1 AND detected_at <= $2
+       ${scoped ? 'AND group_id = ANY($3::text[])' : ''}`,
+      scoped ? [fromTs, toTs, groupIds] : [fromTs, toTs],
     ),
     query<{ day: string; count: string }>(
       `SELECT TO_CHAR(msg_ts AT TIME ZONE 'Asia/Ho_Chi_Minh', 'YYYY-MM-DD') AS day, COUNT(*) AS count
        FROM messages WHERE msg_ts >= $1 AND msg_ts <= $2
+       ${scoped ? 'AND group_id = ANY($3::text[])' : ''}
        GROUP BY day ORDER BY day`,
-      [fromTs, toTs],
+      scoped ? [fromTs, toTs, groupIds] : [fromTs, toTs],
     ),
     query<{ count: string }>(
-      `SELECT COUNT(DISTINCT branch) AS count FROM group_names WHERE branch IS NOT NULL AND branch != ''`,
+      `SELECT COUNT(DISTINCT branch) AS count FROM group_names WHERE branch IS NOT NULL AND branch != ''
+       ${scoped ? 'AND group_id = ANY($1::text[])' : ''}`,
+      scoped ? [groupIds] : [],
     ),
     query<{ count: string }>(
       `SELECT COUNT(DISTINCT m.sender_uid) AS count
        FROM messages m
        LEFT JOIN group_names gn ON gn.group_id = m.group_id
        WHERE m.responder_type = 'customer' AND m.msg_ts >= $1 AND m.msg_ts <= $2
-         AND COALESCE(gn.group_type,'customer') NOT IN ('internal')`,
-      [fromTs, toTs],
+         AND COALESCE(gn.group_type,'customer') NOT IN ('internal')
+         ${scoped ? 'AND m.group_id = ANY($3::text[])' : ''}`,
+      scoped ? [fromTs, toTs, groupIds] : [fromTs, toTs],
     ),
   ]);
 
@@ -131,21 +145,28 @@ export async function getZDashOverview(from: string, to: string): Promise<ZDashO
 
 // Section "AI Chatbot": AI vs người thật trả lời, tỉ lệ chưa trả lời được, thời gian phản hồi,
 // và phân loại loại câu hỏi khách hỏi (order/promotion/complaint/info/other)
-export async function getZDashChatbot(from: string, to: string): Promise<ZDashChatbot> {
+// groupIds: khi != null, giới hạn về các group của account đang chọn ở filter trên cùng
+export async function getZDashChatbot(from: string, to: string, groupIds?: string[] | null): Promise<ZDashChatbot> {
   const fromTs = new Date(`${from}T00:00:00+07:00`);
   const toTs   = new Date(`${to}T23:59:59+07:00`);
+  const scoped = groupIds != null;
+  if (scoped && groupIds!.length === 0) {
+    return { aiReplies: 0, humanReplies: 0, unanswered: 0, unansweredTotal: 0, avgResponseMin: null, questionTypes: [] };
+  }
 
   const [replyCounts, unanswered, avgResponse, questionTypes] = await Promise.all([
     query<{ responder_type: string; count: string }>(
       `SELECT responder_type, COUNT(*) AS count FROM messages
        WHERE responder_type IN ('ai','human') AND msg_ts >= $1 AND msg_ts <= $2
+       ${scoped ? 'AND group_id = ANY($3::text[])' : ''}
        GROUP BY responder_type`,
-      [fromTs, toTs],
+      scoped ? [fromTs, toTs, groupIds] : [fromTs, toTs],
     ),
     query<{ unanswered: string; total: string }>(
       `SELECT COUNT(*) FILTER (WHERE is_answered = false) AS unanswered, COUNT(*) AS total
-       FROM ai_logs WHERE created_at >= $1 AND created_at <= $2`,
-      [fromTs, toTs],
+       FROM ai_logs WHERE created_at >= $1 AND created_at <= $2
+       ${scoped ? 'AND group_id = ANY($3::text[])' : ''}`,
+      scoped ? [fromTs, toTs, groupIds] : [fromTs, toTs],
     ),
     query<{ avg_min: string | null }>(
       `SELECT AVG(EXTRACT(EPOCH FROM (m.msg_ts - prev_cust.msg_ts)) / 60)::numeric(10,1) AS avg_min
@@ -154,14 +175,16 @@ export async function getZDashChatbot(from: string, to: string): Promise<ZDashCh
          SELECT MAX(msg2.msg_ts) AS msg_ts FROM messages msg2
          WHERE msg2.group_id = m.group_id AND msg2.msg_ts < m.msg_ts AND msg2.responder_type = 'customer'
        ) prev_cust ON true
-       WHERE m.responder_type = 'ai' AND m.msg_ts >= $1 AND m.msg_ts <= $2`,
-      [fromTs, toTs],
+       WHERE m.responder_type = 'ai' AND m.msg_ts >= $1 AND m.msg_ts <= $2
+       ${scoped ? 'AND m.group_id = ANY($3::text[])' : ''}`,
+      scoped ? [fromTs, toTs, groupIds] : [fromTs, toTs],
     ),
     query<{ type: string; count: string }>(
       `SELECT COALESCE(question_type, 'other') AS type, COUNT(*) AS count
        FROM messages WHERE responder_type = 'customer' AND msg_ts >= $1 AND msg_ts <= $2
+       ${scoped ? 'AND group_id = ANY($3::text[])' : ''}
        GROUP BY type ORDER BY count DESC`,
-      [fromTs, toTs],
+      scoped ? [fromTs, toTs, groupIds] : [fromTs, toTs],
     ),
   ]);
 
@@ -178,16 +201,22 @@ export async function getZDashChatbot(from: string, to: string): Promise<ZDashCh
 }
 
 // Section "Monitor": issue breakdown + số liệu theo từng chi nhánh/cửa hàng (group_names.branch)
-export async function getZDashMonitor(from: string, to: string): Promise<ZDashMonitor> {
+// groupIds: khi != null, giới hạn về các group của account đang chọn ở filter trên cùng
+export async function getZDashMonitor(from: string, to: string, groupIds?: string[] | null): Promise<ZDashMonitor> {
   const fromTs = new Date(`${from}T00:00:00+07:00`);
   const toTs   = new Date(`${to}T23:59:59+07:00`);
+  const scoped = groupIds != null;
+  if (scoped && groupIds!.length === 0) {
+    return { issueTypes: [], stores: [] };
+  }
 
   const [issueTypes, stores] = await Promise.all([
     query<{ issue_type: string; count: string }>(
       `SELECT issue_type, COUNT(*) AS count FROM sales_issues
        WHERE status = 'open' AND detected_at >= $1 AND detected_at <= $2
+       ${scoped ? 'AND group_id = ANY($3::text[])' : ''}
        GROUP BY issue_type ORDER BY count DESC`,
-      [fromTs, toTs],
+      scoped ? [fromTs, toTs, groupIds] : [fromTs, toTs],
     ),
     query<{ branch: string; customers: string; messages: string; ai_replies: string; human_replies: string; open_issues: string }>(
       `SELECT
@@ -204,9 +233,10 @@ export async function getZDashMonitor(from: string, to: string): Promise<ZDashMo
        JOIN group_names gn ON gn.group_id = m.group_id
        WHERE gn.branch IS NOT NULL AND gn.branch != ''
          AND m.msg_ts >= $1 AND m.msg_ts <= $2
+         ${scoped ? 'AND m.group_id = ANY($3::text[])' : ''}
        GROUP BY gn.branch
        ORDER BY messages DESC`,
-      [fromTs, toTs],
+      scoped ? [fromTs, toTs, groupIds] : [fromTs, toTs],
     ),
   ]);
 
@@ -237,7 +267,7 @@ export async function getZDashAccounts(from: string, to: string): Promise<ZDashA
     if (!a.linked_sender_uid) {
       return {
         id: a.id, account_name: a.account_name, branch: a.branch, role: a.role,
-        linked: false, messages: 0, ai_queries: 0, open_issues: 0, quality_score: null,
+        linked: false, messages: 0, ai_queries: 0, open_issues: 0, quality_score: null, group_ids: [],
       };
     }
     const [msgs, aiQ, groupIds] = await Promise.all([
@@ -265,13 +295,19 @@ export async function getZDashAccounts(from: string, to: string): Promise<ZDashA
       openIssues = Number(issueRows[0]?.count ?? 0);
     }
 
+    const messageCount = Number(msgs[0]?.count ?? 0);
+    const qualityScore = messageCount > 0
+      ? Math.max(0, Math.min(100, Math.round(100 - (openIssues / messageCount) * 100 * 10)))
+      : null;
+
     return {
       id: a.id, account_name: a.account_name, branch: a.branch, role: a.role,
       linked: true,
-      messages: Number(msgs[0]?.count ?? 0),
+      messages: messageCount,
       ai_queries: Number(aiQ[0]?.count ?? 0),
       open_issues: openIssues,
-      quality_score: null,
+      quality_score: qualityScore,
+      group_ids: ids,
     };
   }));
 

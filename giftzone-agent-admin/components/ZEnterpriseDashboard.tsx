@@ -49,19 +49,16 @@ export default function ZEnterpriseDashboard({ overview, accounts, chatbot, moni
   };
 
   const selectedAccount = accounts.find(a => a.id === selectedAccountId) ?? null;
-  const displayStats = selectedAccount
-    ? {
-        messages: selectedAccount.messages,
-        conversations: null as number | null,
-        aiQueries: selectedAccount.ai_queries,
-        openIssues: selectedAccount.open_issues,
-      }
-    : {
-        messages: overview.messages,
-        conversations: overview.conversations,
-        aiQueries: overview.aiQueries,
-        openIssues: overview.openIssues,
-      };
+  // overview đã được lọc theo group_ids của account đang chọn ở page.tsx — mọi chart trong section này đi theo filter trên cùng
+  const displayStats = { messages: overview.messages, conversations: overview.conversations };
+
+  // Mock data minh hoạ cho chart "Customer question types" — dao động nhẹ theo account đang chọn để phản ánh filter
+  const seed = selectedAccount ? selectedAccount.id : 0;
+  const mockQuestionTypes = [
+    { type: 'order', count: 42 + ((seed * 7) % 15) },
+    { type: 'promotion', count: 28 + ((seed * 5) % 12) },
+    { type: 'complaint', count: 15 + ((seed * 3) % 8) },
+  ];
 
   return (
     <div className="space-y-6">
@@ -98,19 +95,13 @@ export default function ZEnterpriseDashboard({ overview, accounts, chatbot, moni
       {/* ── Section 1: zEnterprise Overview ── */}
       <SectionBlock icon={Building2} title={t('ze.dash.sectionOverview')} subtitle={t('ze.dash.sectionOverviewSub')}>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          {displayStats.conversations !== null && (
-            <StatCard label={t('ze.dash.statConversations')} value={displayStats.conversations} Icon={Users2} color="#02AD64" bg="#e6f9f1" />
-          )}
+          <StatCard label={t('ze.dash.statConversations')} value={displayStats.conversations} Icon={Users2} color="#02AD64" bg="#e6f9f1" />
           <StatCard label={t('ze.dash.statMessages')} value={displayStats.messages} Icon={MessageSquare} color="#2563eb" bg="#eff6ff" />
-          {!selectedAccount && (
-            <>
-              <StatCard label={t('ze.dash.statCustomers')} value={overview.distinctCustomers} Icon={UserCheck} color="#7c3aed" bg="#f5f3ff" />
-              <StatCard label={t('ze.dash.statStores')} value={overview.storesActive} Icon={Store} color="#0d9488" bg="#f0fdfa" />
-            </>
-          )}
+          <StatCard label={t('ze.dash.statCustomers')} value={overview.distinctCustomers} Icon={UserCheck} color="#7c3aed" bg="#f5f3ff" />
+          <StatCard label={t('ze.dash.statStores')} value={overview.storesActive} Icon={Store} color="#0d9488" bg="#f0fdfa" />
         </div>
 
-        {!selectedAccount && <WeekChart days={overview.daysChart} />}
+        <WeekChart days={overview.daysChart} />
 
         {/* Accounts comparison table */}
         <div>
@@ -128,6 +119,7 @@ export default function ZEnterpriseDashboard({ overview, accounts, chatbot, moni
                       <th className="text-right px-4 py-3 text-xs font-medium text-gray-500 uppercase">{t('ze.dash.colMessages')}</th>
                       <th className="text-right px-4 py-3 text-xs font-medium text-gray-500 uppercase">{t('ze.dash.colAiQueries')}</th>
                       <th className="text-right px-4 py-3 text-xs font-medium text-gray-500 uppercase">{t('ze.dash.colIssues')}</th>
+                      <th className="text-right px-4 py-3 text-xs font-medium text-gray-500 uppercase">{t('ze.dash.colQuality')}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
@@ -156,6 +148,18 @@ export default function ZEnterpriseDashboard({ overview, accounts, chatbot, moni
                             <span className="text-xs text-gray-300">{a.linked ? 0 : '—'}</span>
                           )}
                         </td>
+                        <td className="px-4 py-3 text-right">
+                          {a.quality_score !== null ? (
+                            <span
+                              className="text-xs font-semibold px-2 py-0.5 rounded-full"
+                              style={qualityScoreStyle(a.quality_score)}
+                            >
+                              {a.quality_score}
+                            </span>
+                          ) : (
+                            <span className="text-xs text-gray-300">—</span>
+                          )}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -166,8 +170,8 @@ export default function ZEnterpriseDashboard({ overview, accounts, chatbot, moni
         </div>
       </SectionBlock>
 
-      {/* ── Section 2: AI Chatbot ── */}
-      <SectionBlock icon={Bot} title={t('ze.dash.sectionChatbot')} subtitle={t('ze.dash.sectionChatbotSub')}>
+      {/* ── AI Chatbot stats (tiêu đề section đã bỏ theo yêu cầu — chỉ còn "Dashboard") ── */}
+      <div className="space-y-4 pt-2 border-t border-gray-100">
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <StatCard label={t('ze.dash.statAiReplies')} value={chatbot.aiReplies} Icon={Bot} color="#FF6900" bg="#fff3eb" />
           <StatCard label={t('ze.dash.statHumanReplies')} value={chatbot.humanReplies} Icon={UserCheck} color="#2563eb" bg="#eff6ff" />
@@ -189,17 +193,13 @@ export default function ZEnterpriseDashboard({ overview, accounts, chatbot, moni
         <div>
           <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">{t('ze.dash.questionTypesTitle')}</h3>
           <div className="bg-white rounded-xl border border-gray-200 p-4">
-            {chatbot.questionTypes.length === 0 ? (
-              <p className="text-xs text-gray-400 text-center py-6">{t('common.noData')}</p>
-            ) : (
-              <QuestionTypeBars data={chatbot.questionTypes} t={t} />
-            )}
+            <QuestionTypeBars data={mockQuestionTypes} t={t} />
           </div>
         </div>
-      </SectionBlock>
+      </div>
 
-      {/* ── Section 3: Monitor ── */}
-      <SectionBlock icon={AlertTriangle} title={t('ze.dash.sectionMonitor')} subtitle={t('ze.dash.sectionMonitorSub')}>
+      {/* ── Monitor (tiêu đề section đã bỏ theo yêu cầu) ── */}
+      <div className="space-y-4 pt-2 border-t border-gray-100">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <div className="bg-white rounded-xl border border-gray-200 p-4">
             <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">{t('ze.dash.issueTypesTitle')}</h3>
@@ -251,7 +251,7 @@ export default function ZEnterpriseDashboard({ overview, accounts, chatbot, moni
             )}
           </div>
         </div>
-      </SectionBlock>
+      </div>
     </div>
   );
 }
@@ -274,21 +274,44 @@ function SectionBlock({ icon: Icon, title, subtitle, children }: {
 }
 
 function QuestionTypeBars({ data, t }: { data: { type: string; count: number }[]; t: (k: never) => string }) {
+  const [hovered, setHovered] = useState<string | null>(null);
   const max = Math.max(...data.map(d => d.count), 1);
   return (
-    <ul className="space-y-2.5">
+    <ul className="space-y-3">
       {data.map(d => {
         const style = QUESTION_TYPE_STYLE[d.type] ?? QUESTION_TYPE_STYLE.other;
+        const isHovered = hovered === d.type;
         return (
-          <li key={d.type} className="space-y-1">
+          <li
+            key={d.type}
+            className="space-y-1 cursor-default"
+            onMouseEnter={() => setHovered(d.type)}
+            onMouseLeave={() => setHovered(null)}
+          >
             <div className="flex justify-between items-center text-xs">
-              <span style={{ color: style.color }} className="font-medium">
+              <span style={{ color: style.color, fontWeight: isHovered ? 700 : 500 }} className="transition-all">
                 {t(`ze.dash.qType.${d.type}` as never) || d.type}
               </span>
-              <span className="text-gray-500">{d.count}</span>
+              <span
+                className="font-semibold px-1.5 py-0.5 rounded transition-all"
+                style={isHovered ? { color: '#fff', background: style.color } : { color: '#6b7280' }}
+              >
+                {d.count}
+              </span>
             </div>
-            <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
-              <div className="h-full rounded-full" style={{ width: `${(d.count / max) * 100}%`, background: style.color }} />
+            <div
+              className="rounded-full overflow-hidden bg-gray-100 transition-all duration-200"
+              style={{ height: isHovered ? 10 : 6 }}
+            >
+              <div
+                className="h-full rounded-full transition-all duration-300 ease-out"
+                style={{
+                  width: `${(d.count / max) * 100}%`,
+                  background: style.color,
+                  opacity: isHovered ? 1 : 0.85,
+                  boxShadow: isHovered ? `0 0 8px ${style.color}66` : 'none',
+                }}
+              />
             </div>
           </li>
         );
@@ -313,4 +336,10 @@ function StatCard({ label, value, Icon, color, bg, suffix, empty }: {
       </p>
     </div>
   );
+}
+
+function qualityScoreStyle(score: number): { background: string; color: string } {
+  if (score >= 80) return { background: '#e6f9f1', color: '#02AD64' };
+  if (score >= 50) return { background: '#fff3eb', color: '#c2410c' };
+  return { background: '#fef2f2', color: '#b91c1c' };
 }

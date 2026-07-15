@@ -21,11 +21,14 @@ export default async function ZEnterpriseDashboardPage({
 
   let overview, accounts, chatbot, monitor;
   try {
-    [overview, accounts, chatbot, monitor] = await Promise.all([
-      getZDashOverview(from, to),
-      getZDashAccounts(from, to),
-      getZDashChatbot(from, to),
-      getZDashMonitor(from, to),
+    accounts = await getZDashAccounts(from, to);
+    const selectedAccount = selectedAccountId ? accounts.find(a => a.id === selectedAccountId) ?? null : null;
+    const groupIds = selectedAccount ? selectedAccount.group_ids : null;
+
+    [overview, chatbot, monitor] = await Promise.all([
+      getZDashOverview(from, to, groupIds),
+      getZDashChatbot(from, to, groupIds),
+      getZDashMonitor(from, to, groupIds),
     ]);
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
