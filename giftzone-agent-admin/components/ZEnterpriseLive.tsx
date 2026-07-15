@@ -22,22 +22,22 @@ interface DemoMsg {
 
 interface ScenarioDef {
   key: string;
-  labelKey: 'ze.live.scenarioOrder' | 'ze.live.scenarioComplaint' | 'ze.live.scenarioPromo';
+  customerName: string; // tên khách demo hiển thị làm tên đoạn chat — không cần dịch theo locale
   script: { role: Role; text: { vi: string; en: string } }[];
 }
 
 const SCENARIOS: ScenarioDef[] = [
   {
     key: 'order',
-    labelKey: 'ze.live.scenarioOrder',
+    customerName: 'Hau Nguyen',
     script: [
       { role: 'customer', text: {
         vi: 'Chào shop, cửa hàng Nguyễn Trãi còn combo 2 miếng gà + nước không ạ?',
         en: 'Hi, does the Nguyen Trai branch still have the 2-piece chicken + drink combo?',
       } },
       { role: 'employee', text: {
-        vi: 'Dạ chào chị Lan! Cửa hàng còn ạ, combo 2 miếng gà giòn + Pepsi giá 89.000đ ạ.',
-        en: 'Hi Ms. Lan! Yes we do — 2 crispy chicken pieces + Pepsi combo is 89,000₫.',
+        vi: 'Dạ chào chị Hậu! Cửa hàng còn ạ, combo 2 miếng gà giòn + Pepsi giá 89.000đ ạ.',
+        en: 'Hi Hau! Yes we do — 2 crispy chicken pieces + Pepsi combo is 89,000₫.',
       } },
       { role: 'customer', text: {
         vi: 'Cho mình đặt 2 combo, giao tới 12 Nguyễn Trãi nhé.',
@@ -47,7 +47,7 @@ const SCENARIOS: ScenarioDef[] = [
   },
   {
     key: 'complaint',
-    labelKey: 'ze.live.scenarioComplaint',
+    customerName: 'Trang Tran',
     script: [
       { role: 'customer', text: {
         vi: 'Đơn của mình đặt 40 phút rồi mà chưa thấy giao, gọi shipper không nghe máy.',
@@ -65,14 +65,14 @@ const SCENARIOS: ScenarioDef[] = [
   },
   {
     key: 'promo',
-    labelKey: 'ze.live.scenarioPromo',
+    customerName: 'Kha Dinh',
     script: [
       { role: 'customer', text: {
         vi: 'Cửa hàng có chương trình tích điểm thành viên không shop?',
         en: 'Does the store have a membership points program?',
       } },
       { role: 'employee', text: {
-        vi: 'Dạ có ạ! Chị tích điểm mỗi đơn hàng, đủ 500 điểm đổi được 1 phần gà miễn phí ạ.',
+        vi: 'Dạ có ạ! Anh tích điểm mỗi đơn hàng, đủ 500 điểm đổi được 1 phần gà miễn phí ạ.',
         en: 'Yes! You earn points on every order — 500 points gets you a free chicken portion.',
       } },
     ],
@@ -103,12 +103,12 @@ interface DemoThread {
 
 interface PendingSend { id: number; text: string; status: 'pending' | 'sent' | 'failed'; error?: string }
 
-function scriptToMessages(s: ScenarioDef, locale: 'vi' | 'en', customerName: string, employeeName: string): DemoMsg[] {
+function scriptToMessages(s: ScenarioDef, locale: 'vi' | 'en', employeeName: string): DemoMsg[] {
   return s.script.map(line => ({
     id: nextId(),
     role: line.role,
     senderId: line.role === 'customer' ? 'live-customer' : 'live-employee',
-    senderName: line.role === 'customer' ? customerName : employeeName,
+    senderName: line.role === 'customer' ? s.customerName : employeeName,
     text: line.text[locale],
   }));
 }
@@ -118,8 +118,8 @@ interface Props { initialRealThreads: InboxThread[] }
 export default function ZEnterpriseLive({ initialRealThreads }: Props) {
   const { t, locale } = useLocale();
 
-  const CUSTOMER_NAME = locale === 'en' ? 'Customer — Nguyen Thi Lan' : 'Khách hàng — Nguyễn Thị Lan';
   const EMPLOYEE_NAME = locale === 'en' ? 'GiftZone Staff' : 'Nhân viên GiftZone';
+  const NEW_CHAT_CUSTOMER = 'Khách hàng';
 
   // Real threads — dữ liệu thật, gửi tin ở đây tới đúng khách hàng thật qua Zalo
   const [realThreads, setRealThreads] = useState(initialRealThreads);
@@ -133,7 +133,7 @@ export default function ZEnterpriseLive({ initialRealThreads }: Props) {
       kind: 'demo',
       id: s.key,
       scenarioKey: s.key,
-      messages: scriptToMessages(s, locale, CUSTOMER_NAME, EMPLOYEE_NAME),
+      messages: scriptToMessages(s, locale, EMPLOYEE_NAME),
       aiMode: true,
       analyzed: false,
     })),
@@ -193,12 +193,16 @@ export default function ZEnterpriseLive({ initialRealThreads }: Props) {
     return () => clearInterval(timer);
   }, [pending, selectedRealThread?.thread_id]);
 
-  function threadName(th: DemoThread): string {
+  function demoCustomerName(th: DemoThread): string {
     if (th.scenarioKey) {
       const s = SCENARIOS.find(x => x.key === th.scenarioKey);
-      if (s) return t(s.labelKey);
+      if (s) return s.customerName;
     }
-    return th.customName ?? (locale === 'en' ? 'New chat' : 'Đoạn chat mới');
+    return NEW_CHAT_CUSTOMER;
+  }
+
+  function threadName(th: DemoThread): string {
+    return th.scenarioKey ? demoCustomerName(th) : (th.customName ?? (locale === 'en' ? 'New chat' : 'Đoạn chat mới'));
   }
 
   function createDemoThread() {
@@ -263,7 +267,7 @@ export default function ZEnterpriseLive({ initialRealThreads }: Props) {
         id: nextId(),
         role: composerRole,
         senderId: composerRole === 'customer' ? 'live-customer' : 'live-employee',
-        senderName: composerRole === 'customer' ? CUSTOMER_NAME : EMPLOYEE_NAME,
+        senderName: composerRole === 'customer' ? demoCustomerName(selectedDemoThread) : EMPLOYEE_NAME,
         text,
       };
       appendDemoMessage(threadId, msg);
