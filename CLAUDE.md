@@ -246,8 +246,8 @@ Gemini embedding quota resets ~7:00 AM Vietnam time. If exhausted: set `SKIP_IND
 
 | Service | Platform | Config |
 |---------|----------|--------|
-| Backend (Sales AI) | Render — `giftzone-ai` | `render.yaml`, account 1, internal sales groups, `ENABLE_RAG` mặc định bật |
-| Backend (Deal Monitor) | Render — `giftzone-deal-monitor` | manual, account 2, customer groups, **`ENABLE_RAG=false`** (tắt RAG docs, Ops Assistant vẫn chạy nếu account này cũng ở trong nhóm internal) + `ENABLE_DEAL_ANALYSIS=true` + `INSTANCE_ID=dealmonitor` |
+| Backend (Sales AI) | ~~Render~~ → Docker trên VPS `AdminCloud@103.245.255.127:234` (dùng chung với message-hub/ads-system/sdk-voucher/odoo) | Container `giftzone-ai`, host port **4021**→3000, `~/giftzone-ai/` trên VPS. Internal sales groups, `ENABLE_RAG` mặc định bật. Deploy xong 2026-07-23 — xem Critical Decisions Log → Infrastructure |
+| Backend (Deal Monitor) | ~~Render~~ → Docker trên cùng VPS | Container `giftzone-deal-monitor`, host port **4022**→3000, `~/giftzone-deal-monitor/` trên VPS. customer groups, **`ENABLE_RAG=false`** + `ENABLE_DEAL_ANALYSIS=true` + `INSTANCE_ID=dealmonitor`. Env vars set trực tiếp trong `.env` trên từng container (không còn Render dashboard). Deploy xong 2026-07-23 |
 | Admin Dashboard | Vercel — `giftzone-ai.vercel.app` | root dir: `giftzone-agent-admin` |
 | Database | Supabase | project ref: `ytvcmkczealtlvapjjke`, Session Pooler port 5432 |
 
@@ -342,6 +342,8 @@ INSTANCE_ID           # đặt trên deal-monitor để tách cookie DB key riê
 - **GitHub SSH remote**: HTTPS returns 403 due to account mismatch (Thuy-Cam vs ThuyCam2911)
 - **2 Render accounts**: Account 1 = Sales AI (internal groups), Account 2 = Deal Monitor (customer groups)
 - **Render root directory must match folder name**: after monorepo rename, update Root Directory in Render Settings for each service or deploy fails with `cd: No such file or directory`
+- **Migrated off Render to shared VPS `AdminCloud@103.245.255.127:234`** (2026-07-23): GreenNode VPS stayed blocked on network outbound; this VPS works fine (`npm ci`/`docker build` succeed, curl to `registry.npmjs.org` OK). Shared with `message-hub`, `ads-system-api`, `sdk-voucher-api`, Odoo — picked unused host ports **4021** (`giftzone-ai`) and **4022** (`giftzone-deal-monitor`), both map to container port 3000. Source at `~/giftzone-ai/` and `~/giftzone-deal-monitor/` (separate copies, same image build, different `.env`). Both run `docker run --restart unless-stopped`. UFW active on this VPS — 4021/4022 not opened externally (not needed; Zalo WebSocket is outbound-only)
+- **Dockerfile `--omit=optional` broke `sharp`**: `npm ci --omit=dev --omit=optional` was meant to skip `better-sqlite3` (needs Chrome-only cookie-extractor) but also stripped `sharp`'s platform-specific prebuilt binary (a transitive optional dep via `mammoth`/`zca-js`) — container crashed at `require('sharp')` with "Could not load the sharp module". Fixed: `npm ci --omit=dev` only (keeps optional deps; `better-sqlite3` still installs fine via prebuilt binary when network works, and npm doesn't fail the whole `ci` if an optional package can't build)
 
 ---
 
@@ -372,6 +374,7 @@ INSTANCE_ID           # đặt trên deal-monitor để tách cookie DB key riê
 | Auto-sync interval 24h | `backend/src/rag/indexer.js` | Reduced from 15min to preserve Gemini embedding quota |
 | zEnterprise Management (2026-07-08) | `admin/app/zenterprise/` | 3 trang: Accounts CRUD, Live (rename của Demo — bỏ hết wording "demo"), Dashboard phân tích (tổng quan + per-account, filter/time range). Data thật, ghi vào bảng production giống hệt luồng thật |
 | VI/EN i18n toàn dashboard (2026-07-08) | `admin/lib/i18n/`, `admin/components/LocaleProvider.tsx` | Toggle ở Sidebar + trang login; cookie `gz_locale`; dịch toàn bộ UI chrome, không dịch nội dung AI-generated động |
+| zEnterprise Dashboard mở rộng cho demo Jollibee (2026-07-14) | `admin/components/ZEnterpriseAccountsManager.tsx`, `ZEnterpriseDashboard.tsx`, `ZEnterpriseInbox.tsx`, `backend/src/outbound/sender.js` | Phase A–E hoàn thành: (A) form account đổi phone→email/password (UI metadata, không phải Zalo auth thật, password mã hoá AES-256-GCM); (B) schema `group_names.branch`, `messages.responder_type`/`question_type` + heuristic classifier; (C) dashboard tách 3 khối Tổng quan/AI Chatbot/Giám sát; (D) 1:1 Inbox thật — `outbound_messages` queue (backend poll 5s) + `conversation_state.ai_paused` AI/human takeover, admin trang Inbox; (E) branch tagging cho group. Code đã commit+push (`c817b83` admin, `8c82876`+`36eb4fd` backend). **Gửi tin nhắn 1:1 thật chưa test** — chờ backend chạy trên server mới |
 
 ### ⏳ Pending (user action required)
 
@@ -380,6 +383,10 @@ INSTANCE_ID           # đặt trên deal-monitor để tách cookie DB key riê
 | Re-extract cookie account 2 | Zalo web → J2TEAM extension | Account deal-monitor có thể bị ban hoặc cookie thiếu `zpw_enk` |
 | Set `SKIP_INDEX=true` trên Render (nếu chưa) | Render ENV → giftzone-ai service | Ngăn re-index toàn bộ Drive mỗi lần deploy, tránh hết embedding quota |
 | Verify UptimeRobot đang ping đúng URL + interval ≤14min | UptimeRobot dashboard | Service vẫn có khả năng sleep nếu ping URL sai hoặc interval quá dài |
+| GreenNode VPS deploy vẫn bị chặn (network outbound) — bỏ qua, đã deploy trên VPS khác thay thế | GreenNode Ubuntu VPS | Không còn theo hướng này — xem VPS mới `103.245.255.127` ở bảng Deploy phía trên |
+| Mở firewall port 4021/4022 nếu cần healthcheck từ ngoài | VPS `103.245.255.127`, `sudo ufw allow 4021/tcp` (+ 4022) | UFW đang chặn 2 port này — không bắt buộc vì WebSocket Zalo là kết nối outbound, chỉ cần nếu muốn monitor từ ngoài |
+| Re-extract cookie khi hết hạn (không tự refresh trên VPS) | SSH vào VPS, sửa `~/giftzone-ai/.env` hoặc `~/giftzone-deal-monitor/.env`, `docker restart` | Cron refresh cookie 3AM chỉ chạy trên máy Mac có Chrome — trên VPS phải re-extract + cập nhật `.env` thủ công khi cookie hết hạn |
+| Test gửi tin nhắn 1:1 thật (Zalo) qua Inbox mới | `admin/app/zenterprise/live/` | Backend đã chạy ổn định trên VPS mới — có thể test, nhưng vẫn cần xác nhận recipient cụ thể trước khi trigger gửi thật (an toàn — tránh gửi nhầm) |
 
 ### 🔲 Not yet implemented
 
@@ -425,7 +432,7 @@ INSTANCE_ID           # đặt trên deal-monitor để tách cookie DB key riê
 4. ✅ Đã rate-limit `/login` theo IP
 5. ⏳ **Chưa làm — cần bàn với người phụ trách pháp lý**: thông báo tối thiểu cho khách về việc chat được AI phân tích/lưu trữ (giảm rủi ro NĐ13/2023). Đây không phải vấn đề code, cần quyết định từ phía kinh doanh/pháp lý.
 
-**⚠️ Việc cần làm để fix có hiệu lực:** set biến môi trường `SETTINGS_ENC_KEY` (chuỗi hex 64 ký tự = 32 bytes, vd `openssl rand -hex 32`) — **giống hệt giá trị** trên cả Render (`giftzone-ai`, `giftzone-deal-monitor`) và Vercel (`giftzone-agent-admin`). Nếu không set, hệ thống fallback về plaintext (không crash) nhưng mất tác dụng mã hoá.
+**⚠️ Việc cần làm để fix có hiệu lực:** set biến môi trường `SETTINGS_ENC_KEY` (chuỗi hex 64 ký tự = 32 bytes, vd `openssl rand -hex 32`) — **giống hệt giá trị** trên cả 2 backend (`giftzone-ai`, `giftzone-deal-monitor` — nay đang migrate sang GreenNode VPS, set qua `.env`/env file container thay vì Render dashboard) và Vercel (`giftzone-agent-admin`). Nếu không set, hệ thống fallback về plaintext (không crash) nhưng mất tác dụng mã hoá.
 
 ---
 
@@ -459,3 +466,4 @@ INSTANCE_ID           # đặt trên deal-monitor để tách cookie DB key riê
 | `app/api/issues/[id]/route.ts` | SQL string interpolation for `resolved_at` (pattern risk) | Replaced with `CASE WHEN $1='resolved' THEN NOW() ELSE NULL END` |
 | `app/api/config/route.ts` | No auth check, relied solely on `proxy.ts` middleware; cookie leaked plaintext via RSC payload in `settings/page.tsx` | Added `isAuthenticated()`, AES-256-GCM encryption at rest, mask cookie before it ever leaves the server (page.tsx + API GET) |
 | `app/api/auth/route.ts` | No rate limiting — dashboard password brute-forceable | Added `login_attempts` table, 5 failures/10min per IP → 429 |
+| `Dockerfile` | `npm ci --omit=dev --omit=optional` stripped `sharp`'s platform binary (transitive optional dep), crashed on `require('sharp')` | Changed to `npm ci --omit=dev` — keeps optional deps |
