@@ -11,7 +11,8 @@ giftzone-agent/
 ├── giftzone-agent-backend/   # Node.js ESM agent (Zalo AI + RAG + Deal Analyzer)
 ├── giftzone-agent-admin/     # Next.js 14 App Router admin dashboard
 ├── spike/                    # Throwaway proof-of-concept scripts
-├── render.yaml               # Render deploy config (backend only)
+├── docs/                     # zalo-integration-guide.md, zenterprise-features-jollibee(-en).md (client-facing)
+├── render.yaml               # Render deploy config (lịch sử — không còn dùng, xem Deploy)
 └── CLAUDE.md
 ```
 
@@ -118,8 +119,10 @@ src/
 - `responder.js` — uses `MessageType.DirectMessage` when `ctx.isDirect=true`, `GroupMessage` otherwise; calls `answer()` directly, no thinking message, no source citation
 - `embedder.js` — `outputDimensionality: 1536` (HNSW limit is 2000; default 3072 exceeds it); exponential backoff on 429
 - `indexer.js` — 600ms delay between chunks (critical for free-tier rate limit); polls Drive Changes API every **24h** (reduced from 15min to preserve embedding quota)
-- `analyzer.js` — model fallback chain; XML tags around conversation to prevent prompt injection; 60s delay between groups; role-based tagging `[GZ-Sales]`/`[GZ-CS]`/`[GZ-Manager]`/`[GZ-Tech]`/`[KH]` (no-op if table empty); writes `analyzer_status=degraded` to settings when entire chain fails
+- `analyzer.js` — model fallback chain; XML tags around conversation to prevent prompt injection; 60s delay between groups; role-based tagging `[GZ-Sales]`/`[GZ-CS]`/`[GZ-Manager]`/`[GZ-Tech]`/`[KH]` (no-op if table empty); writes `analyzer_status=degraded` to settings when entire chain fails. **Chạy trên cả nhóm nhiều người lẫn thread 1:1** — chỉ loại trừ `group_type='internal'`, không loại trừ `direct`
 - `cookie-extractor.js` — safety: requires `zpsid`/`zpw_sek` and ≥3 cookies before writing DB; does NOT run at startup
+- `summary/engine.js` — Daily summary (18:00 T2–T6) **chỉ gửi vào 1 nhóm monitoring cố định**, đọc từ `getConfig('daily_summary_group_id', ...)` (mặc định `5666015708994110958` — "Chat group Monitoring w. AI"), KHÔNG còn broadcast cho mọi nhóm `internal` đang active như trước (2026-07-23, xem Known Bugs Fixed). Weekly summary vẫn giữ hành vi cũ (gửi mọi nhóm internal active)
+- `classify.js` — `classifyQuestionType()` heuristic theo từ khoá, gắn nhãn `order`/`complaint`/`promotion`/`info`/`other` cho MỌI tin nhắn khách (không phụ thuộc AI có trả lời hay không) — dùng cho thống kê Dashboard, không phải hệ thống quản lý đơn hàng thật (chưa có bảng order/mã đơn/trạng thái)
 
 ### Admin (`giftzone-agent-admin/`)
 
@@ -246,8 +249,8 @@ Gemini embedding quota resets ~7:00 AM Vietnam time. If exhausted: set `SKIP_IND
 
 | Service | Platform | Config |
 |---------|----------|--------|
-| Backend (Sales AI) | ~~Render~~ → Docker trên VPS `AdminCloud@103.245.255.127:234` (dùng chung với message-hub/ads-system/sdk-voucher/odoo) | Container `giftzone-ai`, host port **4021**→3000, `~/giftzone-ai/` trên VPS. Internal sales groups, `ENABLE_RAG` mặc định bật. Deploy xong 2026-07-23 — xem Critical Decisions Log → Infrastructure |
-| Backend (Deal Monitor) | ~~Render~~ → Docker trên cùng VPS | Container `giftzone-deal-monitor`, host port **4022**→3000, `~/giftzone-deal-monitor/` trên VPS. customer groups, **`ENABLE_RAG=false`** + `ENABLE_DEAL_ANALYSIS=true` + `INSTANCE_ID=dealmonitor`. Env vars set trực tiếp trong `.env` trên từng container (không còn Render dashboard). Deploy xong 2026-07-23 |
+| Backend (Sales AI) | ~~Render~~ → Docker trên VPS `AdminCloud@103.245.255.127:234` (dùng chung với message-hub/ads-system/sdk-voucher/odoo) | Container `giftzone-ai`, host port **4021**→3000, `~/giftzone-ai/` trên VPS. Internal sales groups, `ENABLE_RAG` mặc định bật. **Deploy xong + verified LIVE 2026-07-23** — login Zalo OK (Agent ID `617909414199624239`), WebSocket ổn định, đã test @mention thật trong nhóm nội bộ và nhận phản hồi bình thường — xem Critical Decisions Log → Infrastructure |
+| Backend (Deal Monitor) | ~~Render~~ → Docker trên cùng VPS | Container `giftzone-deal-monitor`, host port **4022**→3000, `~/giftzone-deal-monitor/` trên VPS. customer groups, **`ENABLE_RAG=false`** + `ENABLE_DEAL_ANALYSIS=true` + `INSTANCE_ID=dealmonitor`. Env vars set trực tiếp trong `.env` trên từng container (không còn Render dashboard). **Deploy xong + verified LIVE 2026-07-23** — login Zalo OK (Agent ID `639724275507298991`), WebSocket ổn định. Không trả lời 1:1 hay câu hỏi docs (đúng thiết kế — `ENABLE_RAG=false` chỉ cho Ops Assistant trả lời trong nhóm internal) |
 | Admin Dashboard | Vercel — `giftzone-ai.vercel.app` | root dir: `giftzone-agent-admin` |
 | Database | Supabase | project ref: `ytvcmkczealtlvapjjke`, Session Pooler port 5432 |
 
@@ -320,6 +323,10 @@ INSTANCE_ID           # đặt trên deal-monitor để tách cookie DB key riê
 - **auto-resolve guard**: only calls `autoResolve()` when `messages.length >= 5` — prevents resolving open issues when there's not enough data to re-analyze
 - **`analyzer_status` setting**: written to `settings` table with value `'degraded'` when entire MODEL_CHAIN fails; Dashboard can surface this warning
 
+### Message Classification (2026-07-23)
+- **`gz_members` không áp dụng cho tin nhắn 1:1**: `responder_type` trước đây tính `isGzMember ? 'human' : 'customer'` cho MỌI tin nhắn (group lẫn 1:1) — nếu UID người gửi tin 1:1 trùng với 1 UID trong `gz_members` (vd founder/staff tự nhắn 1:1 với bot để test), tin bị gắn nhầm `'human'` thay vì `'customer'`, khiến zEnterprise Inbox hiển thị sai bên (phải/trái). Fix: `listener.js._logMessage()` nhận thêm tham số `isDirect` — với tin 1:1, luôn gắn `responder_type='customer'` bất kể `gz_members`, vì mỗi thread 1:1 với bot về bản chất là 1 khách hàng thật. `gz_members` chỉ còn ý nghĩa cho tin nhắn trong GROUP (staff nhắn lẫn trong nhóm chat nhiều người)
+- **Daily Summary chỉ gửi 1 nhóm cố định, không broadcast**: trước đây `runDailySummary()` lấy MỌI `group_type='internal'` đang active trong ngày rồi gửi summary riêng cho từng nhóm — gây spam nếu có nhiều nhóm internal. Đổi thành chỉ gửi vào 1 group_id lấy từ `getConfig('daily_summary_group_id', ...)` (mặc định nhóm "Chat group Monitoring w. AI"). Weekly summary (thứ 6) chưa đổi, vẫn gửi mọi nhóm internal active
+
 ### Admin / Dashboard
 - **`force-dynamic`**: Required on all pages with DB queries — prevents Next.js build-time prerender crash
 - **Timezone**: All date display needs `timeZone: 'Asia/Ho_Chi_Minh'` (Vercel runs UTC)
@@ -344,10 +351,12 @@ INSTANCE_ID           # đặt trên deal-monitor để tách cookie DB key riê
 - **Render root directory must match folder name**: after monorepo rename, update Root Directory in Render Settings for each service or deploy fails with `cd: No such file or directory`
 - **Migrated off Render to shared VPS `AdminCloud@103.245.255.127:234`** (2026-07-23): GreenNode VPS stayed blocked on network outbound; this VPS works fine (`npm ci`/`docker build` succeed, curl to `registry.npmjs.org` OK). Shared with `message-hub`, `ads-system-api`, `sdk-voucher-api`, Odoo — picked unused host ports **4021** (`giftzone-ai`) and **4022** (`giftzone-deal-monitor`), both map to container port 3000. Source at `~/giftzone-ai/` and `~/giftzone-deal-monitor/` (separate copies, same image build, different `.env`). Both run `docker run --restart unless-stopped`. UFW active on this VPS — 4021/4022 not opened externally (not needed; Zalo WebSocket is outbound-only)
 - **Dockerfile `--omit=optional` broke `sharp`**: `npm ci --omit=dev --omit=optional` was meant to skip `better-sqlite3` (needs Chrome-only cookie-extractor) but also stripped `sharp`'s platform-specific prebuilt binary (a transitive optional dep via `mammoth`/`zca-js`) — container crashed at `require('sharp')` with "Could not load the sharp module". Fixed: `npm ci --omit=dev` only (keeps optional deps; `better-sqlite3` still installs fine via prebuilt binary when network works, and npm doesn't fail the whole `ci` if an optional package can't build)
+- **`docker restart` KHÔNG áp dụng image mới build** (2026-07-23): sau khi sửa code + `docker build` lại image cùng tag, `docker restart <container>` chỉ khởi động lại container CŨ (vẫn dùng image snapshot lúc `docker run` ban đầu) — container tiếp tục chạy code cũ dù image mới đã sẵn sàng, không có cảnh báo/lỗi gì. Debug mất thời gian vì log trông vẫn "bình thường". **Đúng quy trình deploy code mới lên VPS**: `docker rm -f <container>` rồi `docker run -d --name <container> ... <image>:latest` lại từ đầu — không dùng `restart`. Luôn verify bằng `docker inspect <container> --format '{{.Image}}'` so với `docker images <name> --format '{{.ID}}'` phải khớp nhau sau deploy
+- **Zalo cookie có thể hết hạn/bị từ chối khi đổi IP** (đã xảy ra thật khi deploy lên VPS mới 2026-07-23): lỗi `Cannot read properties of null (reading 'zpw_enk')` khi login — fix bằng cách re-extract cookie mới qua J2TEAM (từ session đang active), cập nhật `.env` trên VPS, deploy lại. Phải đóng hết tab `chat.zalo.me`/`zalo.me` trên trình duyệt trước khi container login, nếu không sẽ bị `Another connection is opened` ngay sau khi login thành công (đã gặp — nguyên nhân là tab J2TEAM export cookie vẫn đang mở)
 
 ---
 
-## Project Status (as of 2026-06-25)
+## Project Status (as of 2026-07-23)
 
 ### ✅ Completed features
 
@@ -374,19 +383,23 @@ INSTANCE_ID           # đặt trên deal-monitor để tách cookie DB key riê
 | Auto-sync interval 24h | `backend/src/rag/indexer.js` | Reduced from 15min to preserve Gemini embedding quota |
 | zEnterprise Management (2026-07-08) | `admin/app/zenterprise/` | 3 trang: Accounts CRUD, Live (rename của Demo — bỏ hết wording "demo"), Dashboard phân tích (tổng quan + per-account, filter/time range). Data thật, ghi vào bảng production giống hệt luồng thật |
 | VI/EN i18n toàn dashboard (2026-07-08) | `admin/lib/i18n/`, `admin/components/LocaleProvider.tsx` | Toggle ở Sidebar + trang login; cookie `gz_locale`; dịch toàn bộ UI chrome, không dịch nội dung AI-generated động |
-| zEnterprise Dashboard mở rộng cho demo Jollibee (2026-07-14) | `admin/components/ZEnterpriseAccountsManager.tsx`, `ZEnterpriseDashboard.tsx`, `ZEnterpriseInbox.tsx`, `backend/src/outbound/sender.js` | Phase A–E hoàn thành: (A) form account đổi phone→email/password (UI metadata, không phải Zalo auth thật, password mã hoá AES-256-GCM); (B) schema `group_names.branch`, `messages.responder_type`/`question_type` + heuristic classifier; (C) dashboard tách 3 khối Tổng quan/AI Chatbot/Giám sát; (D) 1:1 Inbox thật — `outbound_messages` queue (backend poll 5s) + `conversation_state.ai_paused` AI/human takeover, admin trang Inbox; (E) branch tagging cho group. Code đã commit+push (`c817b83` admin, `8c82876`+`36eb4fd` backend). **Gửi tin nhắn 1:1 thật chưa test** — chờ backend chạy trên server mới |
+| zEnterprise Dashboard mở rộng cho demo Jollibee (2026-07-14) | `admin/components/ZEnterpriseAccountsManager.tsx`, `ZEnterpriseDashboard.tsx`, `ZEnterpriseInbox.tsx`, `backend/src/outbound/sender.js` | Phase A–E hoàn thành: (A) form account đổi phone→email/password (UI metadata, không phải Zalo auth thật, password mã hoá AES-256-GCM); (B) schema `group_names.branch`, `messages.responder_type`/`question_type` + heuristic classifier; (C) dashboard tách 3 khối Tổng quan/AI Chatbot/Giám sát; (D) 1:1 Inbox thật — `outbound_messages` queue (backend poll 5s) + `conversation_state.ai_paused` AI/human takeover, admin trang Inbox; (E) branch tagging cho group. Code đã commit+push (`c817b83` admin, `8c82876`+`36eb4fd` backend) |
+| Backend deploy lên VPS mới, verified live (2026-07-23) | VPS `AdminCloud@103.245.255.127`, container `giftzone-ai` (4021) + `giftzone-deal-monitor` (4022) | Cả 2 account login Zalo thành công với cookie mới re-extract, WebSocket ổn định, đã test thật @mention (giftzone-ai trả lời đúng) và xác nhận giftzone-deal-monitor im lặng đúng thiết kế (RAG tắt, không phải bug) |
+| Fix `responder_type` sai cho tin nhắn 1:1 (2026-07-23) | `backend/src/zalo/listener.js` | zEnterprise Inbox hiển thị đúng bên trái/phải cho khách hàng thật, không còn bị gz_members của group làm nhiễu |
+| Daily Summary thu hẹp về 1 nhóm monitoring (2026-07-23) | `backend/src/summary/engine.js` | Không còn spam summary vào mọi nhóm internal — chỉ gửi "Chat group Monitoring w. AI" (`daily_summary_group_id`) |
+| Tài liệu tính năng zEnterprise cho Jollibee (2026-07-23) | `docs/zenterprise-features-jollibee.md` (VI), `docs/zenterprise-features-jollibee-en.md` (EN) | Client-facing, loại trừ phần AI trả lời (Jollibee có AI riêng); tập trung quản lý tài khoản theo chi nhánh, Inbox 1:1, phân loại tin nhắn order/complaint/promotion/info, phát hiện vấn đề chất lượng bằng AI, dashboard theo chi nhánh |
 
 ### ⏳ Pending (user action required)
 
 | Action | Where | Why |
 |--------|-------|-----|
-| Re-extract cookie account 2 | Zalo web → J2TEAM extension | Account deal-monitor có thể bị ban hoặc cookie thiếu `zpw_enk` |
-| Set `SKIP_INDEX=true` trên Render (nếu chưa) | Render ENV → giftzone-ai service | Ngăn re-index toàn bộ Drive mỗi lần deploy, tránh hết embedding quota |
-| Verify UptimeRobot đang ping đúng URL + interval ≤14min | UptimeRobot dashboard | Service vẫn có khả năng sleep nếu ping URL sai hoặc interval quá dài |
-| GreenNode VPS deploy vẫn bị chặn (network outbound) — bỏ qua, đã deploy trên VPS khác thay thế | GreenNode Ubuntu VPS | Không còn theo hướng này — xem VPS mới `103.245.255.127` ở bảng Deploy phía trên |
+| GreenNode VPS deploy vẫn bị chặn (network outbound) — bỏ qua, đã deploy trên VPS khác thay thế | GreenNode Ubuntu VPS | Không còn theo hướng này — đã deploy + verify live trên VPS `103.245.255.127` (xem Deploy) |
 | Mở firewall port 4021/4022 nếu cần healthcheck từ ngoài | VPS `103.245.255.127`, `sudo ufw allow 4021/tcp` (+ 4022) | UFW đang chặn 2 port này — không bắt buộc vì WebSocket Zalo là kết nối outbound, chỉ cần nếu muốn monitor từ ngoài |
-| Re-extract cookie khi hết hạn (không tự refresh trên VPS) | SSH vào VPS, sửa `~/giftzone-ai/.env` hoặc `~/giftzone-deal-monitor/.env`, `docker restart` | Cron refresh cookie 3AM chỉ chạy trên máy Mac có Chrome — trên VPS phải re-extract + cập nhật `.env` thủ công khi cookie hết hạn |
-| Test gửi tin nhắn 1:1 thật (Zalo) qua Inbox mới | `admin/app/zenterprise/live/` | Backend đã chạy ổn định trên VPS mới — có thể test, nhưng vẫn cần xác nhận recipient cụ thể trước khi trigger gửi thật (an toàn — tránh gửi nhầm) |
+| Re-extract cookie khi hết hạn (không tự refresh trên VPS) | SSH vào VPS, sửa `~/giftzone-ai/.env` hoặc `~/giftzone-deal-monitor/.env`, rồi **`docker rm -f` + `docker run` lại** (KHÔNG dùng `docker restart` — xem Critical Decisions Log → Infrastructure) | Cron refresh cookie 3AM chỉ chạy trên máy Mac có Chrome — trên VPS phải re-extract + cập nhật `.env` thủ công khi cookie hết hạn |
+| Kiểm tra lại lỗi gửi tin outbound "Tham số không hợp lệ" | zEnterprise Inbox (`/zenterprise/live`), `outbound_messages` | Đã xảy ra vài lần trong lúc VPS đang rebuild/restart liên tục (2026-07-23) — nghi do session WebSocket gián đoạn giữa lúc đó, không phải bug logic (đã kiểm tra `is_direct`/`MessageType` đều đúng). Cần test lại khi hệ thống ổn định để xác nhận còn xảy ra không |
+| Sửa thẻ "Số cuộc hội thoại" ở zEnterprise Overview để đếm cả hội thoại 1:1 | `admin/lib/queries/zenterprise-dashboard.ts` (`getZDashOverview` — "Conversations" card) | Hiện đang loại trừ `group_type='direct'` (thiết kế cho mô hình group-chat của GiftZone) — với Jollibee (toàn bộ traffic là 1:1) thẻ này sẽ hiển thị sai/thiếu trước khi demo |
+| Quyết định có mở rộng `classifyQuestionType` (nhãn `order`) thành hệ thống theo dõi đơn hàng thật không | `backend/src/utils/classify.js`, cần bảng `orders` mới nếu làm | Hiện chỉ là nhãn heuristic theo từ khoá, không có mã đơn/trạng thái/giá trị — nêu trong tài liệu Jollibee như hướng phát triển thêm, chưa triển khai |
+| Test gửi tin nhắn 1:1 thật (Zalo) qua Inbox mới | `admin/app/zenterprise/live/` | Backend đã chạy ổn định trên VPS mới, đã test gửi/nhận cơ bản — cần test thêm với recipient cụ thể trước khi dùng thật cho Jollibee |
 
 ### 🔲 Not yet implemented
 
@@ -467,3 +480,6 @@ INSTANCE_ID           # đặt trên deal-monitor để tách cookie DB key riê
 | `app/api/config/route.ts` | No auth check, relied solely on `proxy.ts` middleware; cookie leaked plaintext via RSC payload in `settings/page.tsx` | Added `isAuthenticated()`, AES-256-GCM encryption at rest, mask cookie before it ever leaves the server (page.tsx + API GET) |
 | `app/api/auth/route.ts` | No rate limiting — dashboard password brute-forceable | Added `login_attempts` table, 5 failures/10min per IP → 429 |
 | `Dockerfile` | `npm ci --omit=dev --omit=optional` stripped `sharp`'s platform binary (transitive optional dep), crashed on `require('sharp')` | Changed to `npm ci --omit=dev` — keeps optional deps |
+| `zalo/listener.js` | `responder_type` for 1:1 messages set via `isGzMember` — a staff UID messaging the bot 1:1 (e.g. for testing) got mislabeled `'human'` instead of `'customer'`, breaking zEnterprise Inbox left/right rendering | Added `isDirect` param — 1:1 messages always `responder_type='customer'`, `gz_members` check now only applies to group messages |
+| `summary/engine.js` | `runDailySummary()` broadcast to every active `internal` group instead of a single monitoring group | Now sends only to `getConfig('daily_summary_group_id', ...)` (default: "Chat group Monitoring w. AI") |
+| Deploy process (VPS) | `docker restart` after rebuilding an image with the same tag silently keeps running the OLD image — no error, code changes appeared not to take effect | Deploy process fixed to `docker rm -f` + `docker run` (recreate container) instead of `restart`; verify with `docker inspect --format '{{.Image}}'` matching `docker images --format '{{.ID}}'` |

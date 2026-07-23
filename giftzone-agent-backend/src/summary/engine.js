@@ -108,21 +108,22 @@ async function sendSummary(api, groupId, text) {
 }
 
 // ─── Daily summary job ────────────────────────────────────────────────────────
+// Chỉ gửi vào 1 nhóm monitoring duy nhất (không phát cho mọi nhóm internal đang active)
 async function runDailySummary(api) {
   log.info('Chạy daily summary...');
   const since = new Date();
   since.setHours(0, 0, 0, 0); // đầu ngày hôm nay
 
-  const groups = await getActiveGroups(since);
-  log.info(`${groups.length} groups có hoạt động hôm nay`);
+  const groupId = getConfig('daily_summary_group_id', process.env.DAILY_SUMMARY_GROUP_ID ?? '5666015708994110958');
 
-  for (const groupId of groups) {
-    const messages = await fetchMessages(groupId, since);
-    if (messages.length < 3) continue; // Ít quá, không cần summary
-
-    const summary = await generateSummary(messages, 'daily');
-    if (summary) await sendSummary(api, groupId, summary);
+  const messages = await fetchMessages(groupId, since);
+  if (messages.length < 3) {
+    log.info('Không đủ tin nhắn để tạo daily summary');
+    return;
   }
+
+  const summary = await generateSummary(messages, 'daily');
+  if (summary) await sendSummary(api, groupId, summary);
 }
 
 // ─── Weekly summary job ───────────────────────────────────────────────────────

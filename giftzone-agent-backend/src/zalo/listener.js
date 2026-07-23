@@ -87,7 +87,7 @@ export class GroupListener {
       this._cacheDirect1on1Name(userId, senderName);
 
       // Ghi vào DB để Deal Intelligence phân tích (dùng userId làm group_id)
-      await this._logMessage(userId, senderUid, senderName, content, ts, isGz, msgType);
+      await this._logMessage(userId, senderUid, senderName, content, ts, isGz, msgType, true);
 
       if (typeof this.onMention === 'function' && content.trim().length >= 2) {
         await this.onMention({
@@ -192,11 +192,13 @@ export class GroupListener {
     return 'text';
   }
 
-  async _logMessage(groupId, senderUid, senderName, content, ts, isGzMember = false, msgType = 'text') {
+  async _logMessage(groupId, senderUid, senderName, content, ts, isGzMember = false, msgType = 'text', isDirect = false) {
     try {
-      // Nhân viên GZ nhắn tay trong group/1:1 = 'human'; còn lại là tin nhắn khách thật
-      const responderType = isGzMember ? 'human' : 'customer';
-      const questionType = isGzMember ? null : classifyQuestionType(content);
+      // Nhân viên GZ nhắn tay trong group = 'human'; 1:1 luôn là tin khách thật —
+      // gz_members chỉ đánh dấu role trong group, không áp dụng cho thread 1:1 với bot
+      // (tránh trường hợp UID staff cũng đang test/nhắn 1:1 bị nhận nhầm thành 'human')
+      const responderType = (!isDirect && isGzMember) ? 'human' : 'customer';
+      const questionType = responderType === 'human' ? null : classifyQuestionType(content);
       await query(
         `INSERT INTO messages (group_id, sender_uid, sender_name, content, msg_ts, is_gz_member, msg_type, responder_type, question_type)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
