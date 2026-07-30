@@ -222,23 +222,23 @@ All timestamps: `TIMESTAMPTZ`. Group/User IDs: `TEXT` (Zalo IDs are large number
 - `messages.is_gz_member` — cached khi insert, tránh JOIN mỗi lần analytics
 - `messages.msg_type` — `'text'` hoặc `'media'`; analyzer skip non-text khi detect issues
 
-### AI Stack (all free-tier)
+### AI Stack
 
 | Role | Model | Notes |
 |------|-------|-------|
-| RAG chat | `gemini-2.5-flash-lite` | via `@google/generative-ai` |
-| Summary | `gemini-2.5-flash-lite` | daily group summary |
-| Ops Assistant | `gemini-2.5-flash-lite` | `classifyIntent()` + trả lời câu hỏi vận hành |
-| Embeddings | `gemini-embedding-001` | `outputDimensionality: 1536` |
-| Issue detection | `gemini-2.5-flash-lite` | dùng chung `GEMINI_API_KEY` (đổi từ OpenRouter — model free bị 404/429 liên tục) |
+| RAG chat | `claude-haiku-4-5-20251001` | via `@anthropic-ai/sdk`, `src/utils/claude.js` (`generateText()`) |
+| Summary | `claude-haiku-4-5-20251001` | daily group summary |
+| Ops Assistant | `claude-haiku-4-5-20251001` | `classifyIntent()` + trả lời câu hỏi vận hành |
+| Issue detection (Deal Analyzer) | `claude-haiku-4-5-20251001` | dùng chung `ANTHROPIC_API_KEY` |
+| Embeddings | `gemini-embedding-001` (không đổi) | `outputDimensionality: 1536` — Claude không có embedding model, vẫn cần `GEMINI_API_KEY` riêng cho phần này |
 
 Gemini embedding quota resets ~7:00 AM Vietnam time. If exhausted: set `SKIP_INDEX=true`, restart, run `npm run index:drive` after reset.
 
-⚠️ **`gemini-2.5-flash-lite` free-tier quota là 20 request/NGÀY** (`GenerateRequestsPerDayPerProjectPerModel-FreeTier`), và **RAG chat + Summary + Ops Assistant + Deal Analyzer đều dùng chung 1 model này + 1 `GEMINI_API_KEY`** → cộng dồn vào cùng 1 quota 20/ngày. `giftzone-deal-monitor` chạy Deal Analyzer mỗi 15 phút quét nhiều nhóm là nguồn tiêu tốn quota lớn nhất, có thể ăn hết quota trước khi RAG chat (`giftzone-ai`) kịp trả lời — biểu hiện: lỗi `429 Too Many Requests` với `quotaId: GenerateRequestsPerDayPerProjectPerModel-FreeTier` (khác với 429 rate-limit theo phút — quota này theo NGÀY, retry vài giây không có tác dụng). Cân nhắc: dùng API key riêng cho Deal Analyzer, hoặc key có billing nếu cần chạy ổn định.
+**Migrated RAG chat/Summary/Ops/Deal Analyzer từ Gemini sang Claude (2026-07-30)**: Gemini free-tier `gemini-2.5-flash-lite` chỉ 20 request/NGÀY (`GenerateRequestsPerDayPerProjectPerModel-FreeTier`), dùng chung cho cả 4 module → dễ hết quota giữa demo (Deal Analyzer mỗi 15 phút quét nhiều nhóm là nguồn tốn quota lớn nhất). Chuyển 4 module này sang Claude API (`claude-haiku-4-5-20251001`, có billing, không giới hạn 20/ngày) qua helper dùng chung `src/utils/claude.js:generateText()` — có sẵn retry cho 429/529. Embedding vẫn giữ Gemini vì Claude không cung cấp embedding model — 2 API key riêng biệt (`ANTHROPIC_API_KEY` cho generate, `GEMINI_API_KEY` chỉ còn dùng cho embedding).
 
-**Tối ưu số lệnh gọi/token (2026-07-06):**
-- `ops/assistant.js` `classifyIntent()` — heuristic (keyword, miễn phí) chạy trước; chỉ gọi Gemini khi heuristic không đủ tự tin (không match keyword rõ, hoặc `summary` mà thiếu tên nhóm). Trước đây gọi Gemini vô điều kiện cho MỌI @mention trong nhóm internal → giờ phần lớn câu hỏi ops/summary thường gặp bỏ qua hẳn 1 lệnh gọi
-- Tất cả `generateContent()` calls (retriever, ops, summary, analyzer) đều thêm `generationConfig.maxOutputTokens` — trước đây không giới hạn, dễ lãng phí token nếu model trả lời dài hơn cần thiết. Giá trị theo đúng yêu cầu format trong prompt (vd RAG/Ops trả lời ngắn ~10 dòng → 600 tokens, summary "dưới 300 từ" → 1200, analyzer JSON issues → 1500 giữ nguyên mức cũ)
+**Tối ưu số lệnh gọi/token (2026-07-06, vẫn áp dụng sau khi migrate sang Claude):**
+- `ops/assistant.js` `classifyIntent()` — heuristic (keyword, miễn phí) chạy trước; chỉ gọi AI khi heuristic không đủ tự tin (không match keyword rõ, hoặc `summary` mà thiếu tên nhóm). Trước đây gọi AI vô điều kiện cho MỌI @mention trong nhóm internal → giờ phần lớn câu hỏi ops/summary thường gặp bỏ qua hẳn 1 lệnh gọi
+- Tất cả lệnh gọi qua `generateText()` (retriever, ops, summary, analyzer) đều truyền `maxTokens` — giá trị theo đúng yêu cầu format trong prompt (vd RAG/Ops trả lời ngắn ~10 dòng → 600 tokens, summary "dưới 300 từ" → 1200, analyzer JSON issues → 1500)
 - `classifyIntent` dùng `temperature: 0` — output JSON ngắn, cần ổn định/deterministic, không cần sáng tạo
 
 ### Zalo Session Constraints
@@ -279,7 +279,8 @@ GOOGLE_CLIENT_ID
 GOOGLE_CLIENT_SECRET
 GOOGLE_REFRESH_TOKEN
 DRIVE_FOLDER_ID      # folder OR single file ID
-GEMINI_API_KEY       # dùng chung cho RAG, Ops Assistant, Summary, Embedding, Deal Analyzer
+ANTHROPIC_API_KEY    # dùng chung cho RAG, Ops Assistant, Summary, Deal Analyzer (claude-haiku-4-5)
+GEMINI_API_KEY       # chỉ còn dùng cho Embedding (gemini-embedding-001) — Claude không có embedding model
 SETTINGS_ENC_KEY     # hex 64 ký tự (32 bytes) — mã hoá zalo_cookie at-rest, PHẢI khớp với giftzone-agent-admin
 PG_HOST
 PG_PORT=5433
@@ -318,8 +319,8 @@ INSTANCE_ID           # đặt trên deal-monitor để tách cookie DB key riê
 - **`better-sqlite3` is `optionalDependencies`**: Native module needed only on local Mac with Chrome; must not crash on Render build
 
 ### Deal Analyzer
-- **Dùng Gemini (`GEMINI_API_KEY`), không còn OpenRouter**: OpenRouter's free MODEL_CHAIN (llama-3.3-70b, deepseek-r1, gemma-3-27b) rệu rã — 2/3 model bị gỡ khỏi OpenRouter (404), model còn lại rate-limit liên tục (429). Đổi sang `gemini-2.5-flash-lite` dùng chung key với RAG/Ops — có exponential backoff retry cho 429/503 (giống `embedder.js`)
-- **60s delay between groups**: tránh rate limit Gemini free tier
+- **Dùng Claude (`ANTHROPIC_API_KEY`), không còn Gemini/OpenRouter**: OpenRouter's free MODEL_CHAIN (llama-3.3-70b, deepseek-r1, gemma-3-27b) rệu rã ban đầu → đổi sang Gemini `gemini-2.5-flash-lite` → nhưng free-tier chỉ 20 request/ngày dùng chung với RAG/Ops/Summary nên hay hết quota giữa chừng → migrate hẳn sang Claude API (2026-07-30) qua `src/utils/claude.js:generateText()` (có billing, retry sẵn 429/529)
+- **60s delay between groups**: tránh rate limit (giữ nguyên dù đã đổi provider, đề phòng rate limit theo phút)
 - **`deal_key` format**: LLM returns `customer_name_no_accents`, code prepends `${groupId}__` — do NOT include group_id in prompt (causes double prefix)
 - **`gz_members` role tagging**: Empty table = no tags = behavior identical to before (safe default). With roles: `[GZ-Sales]`, `[GZ-CS]`, `[GZ-Manager]`, `[GZ-Tech]` + `[KH]`
 - **Prompt injection guard**: Conversation wrapped in `<conversation>...</conversation>` XML tags

@@ -4,19 +4,16 @@
  *
  * Flow: classifyIntent() → 'docs' (fallback về RAG) | 'ops' | 'summary'
  */
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { generateText } from '../utils/claude.js';
 import { query } from '../utils/db.js';
 import { fetchMessages, generateSummary } from '../summary/engine.js';
 import { createLogger } from '../utils/logger.js';
 
 const log = createLogger('OpsAssistant');
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
-
-// ─── Fallback dựa từ khóa — dùng khi Gemini lỗi/quá tải hoặc misclassify ─────
-// Free tier gemini-2.5-flash-lite thỉnh thoảng 503 — không được để rơi thẳng
-// về "docs" trong trường hợp đó, mất hẳn khả năng trả lời câu hỏi vận hành
+// ─── Fallback dựa từ khóa — dùng khi Claude lỗi/quá tải hoặc misclassify ─────
+// Claude thỉnh thoảng 429/529 — không được để rơi thẳng về "docs" trong
+// trường hợp đó, mất hẳn khả năng trả lời câu hỏi vận hành
 const OPS_KEYWORDS = [
   'vấn đề', 'issue', 'còn gì không', 'ai đang', 'phản hồi chậm', 'im lặng',
   'kpi', 'hiệu suất', 'chưa reply', 'chưa trả lời', 'phàn nàn', 'complain',
@@ -57,10 +54,10 @@ function heuristicClassify(userQuery) {
 }
 
 // ─── Bước 1: Phân loại intent ────────────────────────────────────────────────
-// Heuristic chạy trước (miễn phí, không gọi API). Chỉ gọi Gemini khi heuristic
+// Heuristic chạy trước (miễn phí, không gọi API). Chỉ gọi Claude khi heuristic
 // không đủ tự tin — tiết kiệm 1 lệnh gọi/token cho phần lớn câu hỏi ops thực tế
 // (người dùng tự nhiên hay dùng đúng các từ khoá như "vấn đề", "tóm tắt"...)
-async function classifyWithGemini(userQuery, heuristicHint) {
+async function classifyWithClaude(userQuery, heuristicHint) {
   const prompt = `Phân loại câu hỏi của nhân viên nội bộ GiftZone vào 1 trong 3 intent:
 
 - "ops": hỏi về tình trạng vận hành — issues/vấn đề của nhóm khách, nhóm nào im lặng, ai phản hồi chậm, KPI nhân viên, tình hình chăm sóc khách
@@ -73,11 +70,8 @@ Trả về JSON thuần, không markdown:
 Câu hỏi: "${userQuery.slice(0, 500)}"`;
 
   try {
-    const result = await model.generateContent({
-      contents: [{ role: 'user', parts: [{ text: prompt }] }],
-      generationConfig: { temperature: 0, maxOutputTokens: 150 },
-    });
-    const text = result.response.text().replace(/```json?\n?/g, '').replace(/```/g, '').trim();
+    const raw = await generateText(prompt, { temperature: 0, maxTokens: 150 });
+    const text = raw.replace(/```json?\n?/g, '').replace(/```/g, '').trim();
     const parsed = JSON.parse(text);
     if (!['ops', 'summary', 'docs'].includes(parsed.intent)) {
       return heuristicHint;
@@ -103,7 +97,7 @@ async function classifyIntent(userQuery) {
     log.debug(`Heuristic fast-path: ${heuristic.intent} — bỏ qua Gemini classify call`);
     return heuristic;
   }
-  return classifyWithGemini(userQuery, heuristic);
+  return classifyWithClaude(userQuery, heuristic);
 }
 
 // ─── Resolve tên nhóm → group_id ─────────────────────────────────────────────
@@ -257,11 +251,8 @@ ${context.slice(0, 12000)}
 
 Câu hỏi của quản lý: ${userQuery}`;
 
-  const result = await model.generateContent({
-    contents: [{ role: 'user', parts: [{ text: prompt }] }],
-    generationConfig: { temperature: 0.3, maxOutputTokens: 600 }, // ~10 dòng theo yêu cầu prompt
-  });
-  return result.response.text() ?? 'Có lỗi xảy ra, vui lòng thử lại.';
+  const text = await generateText(prompt, { temperature: 0.3, maxTokens: 600 }); // ~10 dòng theo yêu cầu prompt
+  return text ?? 'Có lỗi xảy ra, vui lòng thử lại.';
 }
 
 // ─── Tóm tắt nhóm theo yêu cầu ───────────────────────────────────────────────

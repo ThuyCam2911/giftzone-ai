@@ -5,15 +5,13 @@
  * - Dùng node-cron + Claude để tổng hợp
  */
 import cron from 'node-cron';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { generateText } from '../utils/claude.js';
 import { MessageType } from 'zca-js';
 import { query } from '../utils/db.js';
 import { getConfig } from '../utils/config.js';
 import { createLogger } from '../utils/logger.js';
 
 const log = createLogger('Summary');
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
 
 // ─── Lấy tin nhắn trong khoảng thời gian ─────────────────────────────────────
 export async function fetchMessages(groupId, since) {
@@ -84,11 +82,7 @@ Cuộc trò chuyện:\n${conversation.slice(0, 8000)}`
 
 Cuộc trò chuyện:\n${conversation.slice(0, 8000)}`; // Limit để không vượt context
 
-  const result = await model.generateContent({
-    contents: [{ role: 'user', parts: [{ text: prompt }] }],
-    generationConfig: { temperature: 0.4, maxOutputTokens: 1200 }, // prompt yêu cầu "dưới 300 từ"
-  });
-  return result.response.text();
+  return generateText(prompt, { temperature: 0.4, maxTokens: 1200 }); // prompt yêu cầu "dưới 300 từ"
 }
 
 function getWeekNumber() {

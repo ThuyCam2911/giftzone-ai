@@ -2,12 +2,12 @@
  * Sales Issue Monitor
  * - Cron 15 phút: đọc messages → detect issues chất lượng sales → lưu DB
  * - Auto-resolve: issues không còn detect → tự chuyển status='resolved'
- * - Dùng chung GEMINI_API_KEY với RAG/Ops (trước đây dùng OpenRouter free
- *   models riêng nhưng 2/3 model trong fallback chain đã bị gỡ (404),
- *   model còn lại rate-limit liên tục — chuyển hẳn sang Gemini cho ổn định)
+ * - Dùng Claude API (trước đây Gemini — quota free-tier 20 request/ngày dùng
+ *   chung với RAG/Ops/Summary gây hết quota giữa chừng; trước nữa dùng
+ *   OpenRouter free models nhưng 2/3 model trong fallback chain đã bị gỡ (404))
  */
 import cron from 'node-cron';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { generateText } from '../utils/claude.js';
 import { MessageType } from 'zca-js';
 import { query } from '../utils/db.js';
 import { getConfig } from '../utils/config.js';
@@ -15,37 +15,20 @@ import { createLogger } from '../utils/logger.js';
 
 const log = createLogger('IssueAI');
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
-
-async function callGemini(prompt, retries = 3) {
-  for (let attempt = 0; attempt < retries; attempt++) {
+async function callClaude(prompt) {
+  try {
+    const text = await generateText(prompt, { temperature: 0.1, maxTokens: 1500 }); // giữ nguyên cấu hình cũ (OpenAI max_tokens: 1500)
+    // Claude hoạt động lại → reset trạng thái degraded
+    query(`INSERT INTO settings (key, value, description) VALUES ('analyzer_status','ok','Trạng thái deal analyzer')
+      ON CONFLICT (key) DO UPDATE SET value='ok', updated_at=NOW()`).catch(() => {});
+    return text ?? '[]';
+  } catch (err) {
+    // Ghi trạng thái degraded vào settings để dashboard hiển thị
     try {
-      const result = await model.generateContent({
-        contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.1, maxOutputTokens: 1500 }, // giữ nguyên cấu hình cũ (OpenAI max_tokens: 1500)
-      });
-      const text = result.response.text() ?? '[]';
-      // Gemini hoạt động lại → reset trạng thái degraded
-      query(`INSERT INTO settings (key, value, description) VALUES ('analyzer_status','ok','Trạng thái deal analyzer')
-        ON CONFLICT (key) DO UPDATE SET value='ok', updated_at=NOW()`).catch(() => {});
-      return text;
-    } catch (err) {
-      const is429 = err.message?.includes('429') || err.status === 429;
-      const is503 = err.message?.includes('503') || err.status === 503;
-      if ((is429 || is503) && attempt < retries - 1) {
-        const wait = Math.pow(2, attempt) * 3000; // 3s, 6s, 12s
-        log.warn(`Gemini ${is429 ? 'rate limit' : 'quá tải'} — đợi ${wait / 1000}s rồi thử lại (lần ${attempt + 1}/${retries})`);
-        await new Promise(r => setTimeout(r, wait));
-        continue;
-      }
-      // Ghi trạng thái degraded vào settings để dashboard hiển thị
-      try {
-        await query(`INSERT INTO settings (key, value, description) VALUES ('analyzer_status','degraded','Trạng thái deal analyzer')
-          ON CONFLICT (key) DO UPDATE SET value='degraded', updated_at=NOW()`);
-      } catch { /* không crash nếu ghi settings lỗi */ }
-      throw err;
-    }
+      await query(`INSERT INTO settings (key, value, description) VALUES ('analyzer_status','degraded','Trạng thái deal analyzer')
+        ON CONFLICT (key) DO UPDATE SET value='degraded', updated_at=NOW()`);
+    } catch { /* không crash nếu ghi settings lỗi */ }
+    throw err;
   }
 }
 
@@ -166,7 +149,7 @@ Cuộc trò chuyện (group ${groupId}):
 ${conversation.slice(0, 6000)}
 </conversation>`;
 
-  const text = await callGemini(prompt);
+  const text = await callClaude(prompt);
 
   try {
     const json = text.replace(/```json?\n?/g, '').replace(/```/g, '').trim();
@@ -291,8 +274,8 @@ async function runAnalysis(api = null) {
 // ─── Khởi động cron ───────────────────────────────────────────────────────────
 // api = null (Deal Monitor chạy SKIP_ZALO) → không gửi critical alert, chỉ ghi DB
 export function startDealAnalyzer(api = null) {
-  if (!process.env.GEMINI_API_KEY) {
-    log.warn('GEMINI_API_KEY chưa cấu hình — Sales Monitor bị tắt');
+  if (!process.env.ANTHROPIC_API_KEY) {
+    log.warn('ANTHROPIC_API_KEY chưa cấu hình — Sales Monitor bị tắt');
     return;
   }
 
