@@ -111,8 +111,9 @@ export class MentionResponder {
       // chỉ Ops Assistant ở trên mới được phép trả lời
       if (!this.enableRagDocs) return;
 
-      // 1:1 chat: kèm 3 lượt hỏi-đáp gần nhất để hỏi nối được
-      const history = isDirect ? await this._fetchHistory(senderUid) : [];
+      // Kèm 3 lượt hỏi-đáp gần nhất của người này để hỏi nối được (cả 1:1 lẫn @mention trong group —
+      // query đã lọc theo sender_uid nên không lẫn ngữ cảnh giữa nhiều người)
+      const history = await this._fetchHistory(senderUid);
 
       const result = await answer(userQuery, history);
       await this._send(groupId, result.answer, isDirect);
