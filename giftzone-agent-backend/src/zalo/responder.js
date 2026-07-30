@@ -18,10 +18,15 @@ const log = createLogger('Responder');
 const COOLDOWN_MS = 3000;          // chặn spam @mention từ cùng 1 user
 const INTERNAL_CACHE_MS = 5 * 60 * 1000;
 
+// Câu chào chung chung (không phải câu hỏi thật) — trả lời nhanh, không chạy RAG
+// (tránh RAG chọn đại 1 tài liệu có độ liên quan thấp làm câu trả lời lạc đề)
+const GREETING_RE = /^(hi+|hey+|hello+|alo+|chào|xin\s*chào|chao)[\s!.,?]*$/i;
+
 export class MentionResponder {
-  constructor(api, { enableRagDocs = true } = {}) {
+  constructor(api, { enableRagDocs = true, internalOnly = false } = {}) {
     this.api = api;
     this.enableRagDocs = enableRagDocs;
+    this.internalOnly = internalOnly; // true: chỉ phản hồi nhân viên GiftZone (gz_members), im lặng với người khác
     this._lastAsk = new Map();       // senderUid → timestamp lần hỏi cuối
     this._internalGroups = new Set();
     this._internalLoadedAt = 0;
@@ -52,12 +57,15 @@ export class MentionResponder {
   }
 
   async handle(ctx) {
-    const { groupId, senderUid, senderName, query: userQuery, ts, isDirect } = ctx;
+    const { groupId, senderUid, senderName, query: userQuery, ts, isDirect, isGzMember } = ctx;
 
     // Cooldown per user — tránh 1 người spam gọi Gemini liên tục
     const now = Date.now();
     if (now - (this._lastAsk.get(senderUid) ?? 0) < COOLDOWN_MS) return;
     this._lastAsk.set(senderUid, now);
+
+    // internalOnly: chỉ phản hồi nhân viên GiftZone (gz_members) — người khác bị bỏ qua hoàn toàn, không có phản hồi gì
+    if (this.internalOnly && !isGzMember) return;
 
     // zEnterprise Inbox: nhân viên đang trả lời tay trên Dashboard cho hội thoại 1:1 này
     // → AI im lặng hoàn toàn, không nhắc lại "bạn cần hỏi gì"
@@ -69,10 +77,18 @@ export class MentionResponder {
       return;
     }
 
+    // Câu chào chung chung — trả lời nhanh, không chạy RAG (tránh trả lời lạc đề dựa vào tài liệu không liên quan)
+    if (GREETING_RE.test(userQuery.trim())) {
+      await this._send(groupId, `Chào bạn 👋 Bạn cần hỏi gì, mình sẵn sàng hỗ trợ!`, isDirect);
+      return;
+    }
+
     try {
-      // Ops Assistant — CHỈ trong nhóm internal (dữ liệu vận hành không cho khách thấy)
+      // Ops Assistant — trong nhóm internal, HOẶC 1:1 với nhân viên GiftZone (vd hỏi tóm tắt 1 đoạn chat)
+      // (dữ liệu vận hành không cho khách thấy — cả 2 điều kiện đều đảm bảo người hỏi là nội bộ)
       await this._loadInternalGroups();
-      if (!isDirect && this._internalGroups.has(groupId)) {
+      const opsEligible = (!isDirect && this._internalGroups.has(groupId)) || (isDirect && isGzMember);
+      if (opsEligible) {
         const ops = await handleInternalQuery(userQuery);
         if (ops.handled) {
           await this._send(groupId, ops.answer, isDirect);

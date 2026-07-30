@@ -75,11 +75,15 @@ async function main() {
     // khách, nhưng vẫn cần trả lời Ops nếu cũng là thành viên 1 nhóm internal.
     log.info('Bước 4/5: Khởi động Zalo listener...');
     const enableRagDocs = process.env.ENABLE_RAG !== 'false';
-    const responder = new MentionResponder(api, { enableRagDocs });
+    const internalOnly = process.env.INTERNAL_ONLY === 'true';
+    const responder = new MentionResponder(api, { enableRagDocs, internalOnly });
     const listener = new GroupListener(api, session.ownId);
     listener.onMention = (ctx) => responder.handle(ctx);
     if (!enableRagDocs) {
       log.info('ENABLE_RAG=false — tắt trả lời RAG docs, Ops Assistant vẫn hoạt động ở nhóm internal');
+    }
+    if (internalOnly) {
+      log.info('INTERNAL_ONLY=true — chỉ phản hồi nhân viên GiftZone (gz_members), im lặng với người khác');
     }
     listener.start();
 

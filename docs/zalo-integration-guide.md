@@ -193,13 +193,13 @@ await api.sendMessage(
 
 ### Cookie bị IP binding
 - Cookie được liên kết với IP tạo ra lần đầu
-- Nếu lấy cookie từ máy Việt Nam (IP VN) nhưng deploy lên Render US → Zalo từ chối
-- Cách đúng: lấy cookie từ phiên đang chạy trên Render (không tạo session mới từ local)
+- Nếu lấy cookie từ máy Việt Nam (IP VN) nhưng deploy lên server ở IP/vùng khác → Zalo có thể từ chối
+- Cách đúng: lấy cookie từ phiên đang chạy trên server đang deploy (không tạo session mới từ local rồi paste sang), hoặc re-extract cookie mới ngay sau khi đổi server
 - Hoặc: dùng VPN để IP máy local khớp với IP server khi lấy cookie
 
 ### 2 tài khoản chạy song song (Multi-instance)
-Project đang chạy 2 Render service với 2 tài khoản Zalo khác nhau:
-- Set biến `INSTANCE_ID=dealmonitor` trên service thứ 2
+Project chạy 2 container Docker trên cùng 1 VPS với 2 tài khoản Zalo khác nhau (`giftzone-ai` và `giftzone-deal-monitor`):
+- Set biến `INSTANCE_ID=dealmonitor` trên container thứ 2
 - Cookie sẽ được lưu vào DB key `zalo_cookie_dealmonitor` thay vì `zalo_cookie` chung → không ghi đè lẫn nhau
 
 ### `selfListen: false` trong production
@@ -220,7 +220,7 @@ Project đang chạy 2 Render service với 2 tài khoản Zalo khác nhau:
 | `zpw_enk null` trong log | Cookie thiếu field | Re-extract đầy đủ qua J2TEAM extension |
 | Bot không nhận @mention | `selfListen: false` + bot mention chính nó | Kiểm tra ownId có khớp không |
 | Gửi tin lỗi "Nhóm không tồn tại" | Dùng `DirectMessage` cho group (hoặc ngược lại) | Dùng đúng `MessageType` theo loại chat |
-| Cookie expire sau khi deploy lên Render | IP binding — session tạo từ IP VN không dùng được ở US | Reuse cookie từ session đang chạy trên Render |
+| Cookie expire sau khi đổi server deploy | IP binding — session tạo từ IP khác không dùng được trên server mới | Re-extract cookie mới ngay trên/từ session đang trust, cập nhật `.env` trên server, deploy lại |
 
 ---
 

@@ -227,11 +227,14 @@ All timestamps: `TIMESTAMPTZ`. Group/User IDs: `TEXT` (Zalo IDs are large number
 | Role | Model | Notes |
 |------|-------|-------|
 | RAG chat | `gemini-2.5-flash-lite` | via `@google/generative-ai` |
-| Summary | `gemini-1.5-flash` | daily group summary |
+| Summary | `gemini-2.5-flash-lite` | daily group summary |
+| Ops Assistant | `gemini-2.5-flash-lite` | `classifyIntent()` + trả lời câu hỏi vận hành |
 | Embeddings | `gemini-embedding-001` | `outputDimensionality: 1536` |
 | Issue detection | `gemini-2.5-flash-lite` | dùng chung `GEMINI_API_KEY` (đổi từ OpenRouter — model free bị 404/429 liên tục) |
 
 Gemini embedding quota resets ~7:00 AM Vietnam time. If exhausted: set `SKIP_INDEX=true`, restart, run `npm run index:drive` after reset.
+
+⚠️ **`gemini-2.5-flash-lite` free-tier quota là 20 request/NGÀY** (`GenerateRequestsPerDayPerProjectPerModel-FreeTier`), và **RAG chat + Summary + Ops Assistant + Deal Analyzer đều dùng chung 1 model này + 1 `GEMINI_API_KEY`** → cộng dồn vào cùng 1 quota 20/ngày. `giftzone-deal-monitor` chạy Deal Analyzer mỗi 15 phút quét nhiều nhóm là nguồn tiêu tốn quota lớn nhất, có thể ăn hết quota trước khi RAG chat (`giftzone-ai`) kịp trả lời — biểu hiện: lỗi `429 Too Many Requests` với `quotaId: GenerateRequestsPerDayPerProjectPerModel-FreeTier` (khác với 429 rate-limit theo phút — quota này theo NGÀY, retry vài giây không có tác dụng). Cân nhắc: dùng API key riêng cho Deal Analyzer, hoặc key có billing nếu cần chạy ổn định.
 
 **Tối ưu số lệnh gọi/token (2026-07-06):**
 - `ops/assistant.js` `classifyIntent()` — heuristic (keyword, miễn phí) chạy trước; chỉ gọi Gemini khi heuristic không đủ tự tin (không match keyword rõ, hoặc `summary` mà thiếu tên nhóm). Trước đây gọi Gemini vô điều kiện cho MỌI @mention trong nhóm internal → giờ phần lớn câu hỏi ops/summary thường gặp bỏ qua hẳn 1 lệnh gọi
@@ -388,6 +391,9 @@ INSTANCE_ID           # đặt trên deal-monitor để tách cookie DB key riê
 | Fix `responder_type` sai cho tin nhắn 1:1 (2026-07-23) | `backend/src/zalo/listener.js` | zEnterprise Inbox hiển thị đúng bên trái/phải cho khách hàng thật, không còn bị gz_members của group làm nhiễu |
 | Daily Summary thu hẹp về 1 nhóm monitoring (2026-07-23) | `backend/src/summary/engine.js` | Không còn spam summary vào mọi nhóm internal — chỉ gửi "Chat group Monitoring w. AI" (`daily_summary_group_id`) |
 | Tài liệu tính năng zEnterprise cho Jollibee (2026-07-23) | `docs/zenterprise-features-jollibee.md` (VI), `docs/zenterprise-features-jollibee-en.md` (EN) | Client-facing, loại trừ phần AI trả lời (Jollibee có AI riêng); tập trung quản lý tài khoản theo chi nhánh, Inbox 1:1, phân loại tin nhắn order/complaint/promotion/info, phát hiện vấn đề chất lượng bằng AI, dashboard theo chi nhánh |
+| Fix thẻ "Số cuộc hội thoại" đếm thiếu hội thoại 1:1 (2026-07-28) | `admin/lib/queries/zenterprise-dashboard.ts` (`getZDashOverview`) | Đổi `NOT IN ('internal','direct')` → `NOT IN ('internal')`; verify trực tiếp qua browser + query DB đối chiếu (23 vs 21) — khớp đúng |
+| So sánh Zalo account types cho Jollibee (2026-07-28) | `docs/zalo-account-types-comparison.md` (VI), `-en.md` (EN) | Personal/ZBusiness/Zalo OA/ZEnterprise — key differences, operations chuyển đổi ZBusiness→ZEnterprise, roadmap 3 giai đoạn (Manual setup/Tool/API) theo thông tin từ Zalo |
+| Demo flow "nông dược" — internal-only + tóm tắt 1:1 (2026-07-28) | `backend/src/zalo/responder.js`, `listener.js`, `index.js`, seed `doc_chunks` | `giftzone-ai`: thêm `INTERNAL_ONLY=true` — chỉ phản hồi `gz_members`, im lặng với người khác. Ops Assistant (tóm tắt/hỏi vận hành) giờ nhận cả tin 1:1 nếu người hỏi là `gz_members` (trước chỉ hoạt động trong nhóm internal) — dùng cho `giftzone-deal-monitor` tóm tắt chat theo yêu cầu. Thêm nhận diện câu chào chung chung (hi/hello/chào...) trả lời nhanh, không chạy RAG (tránh trả lời lạc đề dựa tài liệu không liên quan). Seed 6 sản phẩm nông dược/thuốc BVTV vào `doc_chunks` (chung với knowledge cũ, không xoá). Retriever thêm retry cho lỗi Gemini 429/503 (giống embedder.js) |
 
 ### ⏳ Pending (user action required)
 
@@ -397,7 +403,8 @@ INSTANCE_ID           # đặt trên deal-monitor để tách cookie DB key riê
 | Mở firewall port 4021/4022 nếu cần healthcheck từ ngoài | VPS `103.245.255.127`, `sudo ufw allow 4021/tcp` (+ 4022) | UFW đang chặn 2 port này — không bắt buộc vì WebSocket Zalo là kết nối outbound, chỉ cần nếu muốn monitor từ ngoài |
 | Re-extract cookie khi hết hạn (không tự refresh trên VPS) | SSH vào VPS, sửa `~/giftzone-ai/.env` hoặc `~/giftzone-deal-monitor/.env`, rồi **`docker rm -f` + `docker run` lại** (KHÔNG dùng `docker restart` — xem Critical Decisions Log → Infrastructure) | Cron refresh cookie 3AM chỉ chạy trên máy Mac có Chrome — trên VPS phải re-extract + cập nhật `.env` thủ công khi cookie hết hạn |
 | Kiểm tra lại lỗi gửi tin outbound "Tham số không hợp lệ" | zEnterprise Inbox (`/zenterprise/live`), `outbound_messages` | Đã xảy ra vài lần trong lúc VPS đang rebuild/restart liên tục (2026-07-23) — nghi do session WebSocket gián đoạn giữa lúc đó, không phải bug logic (đã kiểm tra `is_direct`/`MessageType` đều đúng). Cần test lại khi hệ thống ổn định để xác nhận còn xảy ra không |
-| Sửa thẻ "Số cuộc hội thoại" ở zEnterprise Overview để đếm cả hội thoại 1:1 | `admin/lib/queries/zenterprise-dashboard.ts` (`getZDashOverview` — "Conversations" card) | Hiện đang loại trừ `group_type='direct'` (thiết kế cho mô hình group-chat của GiftZone) — với Jollibee (toàn bộ traffic là 1:1) thẻ này sẽ hiển thị sai/thiếu trước khi demo |
+| Nhớ revert config demo "nông dược" khi xong | `giftzone-ai/.env` (`INTERNAL_ONLY=true`, `ENABLE_SUMMARY=false`), `giftzone-deal-monitor/.env` (`ENABLE_DEAL_ANALYSIS=false`) | Config tạm cho demo (2026-07-28/30) trên 2 bot production thật — phân công lại: giftzone-ai CHỈ trả lời câu hỏi (tắt hẳn Summary Engine), giftzone-deal-monitor phụ trách lắng nghe + tóm tắt (daily/weekly summary + tóm tắt 1:1 theo yêu cầu). Nếu demo xong cần trả về vai trò cũ thì phải đổi lại `.env` + `docker rm -f`+`docker run` lại |
+| Quota `gemini-2.5-flash-lite` free-tier chỉ 20 request/ngày, dùng chung cho RAG/Summary/Ops/Deal Analyzer | Google AI Studio | Dễ hết quota giữa demo (lỗi 429 `GenerateRequestsPerDayPerProjectPerModel-FreeTier`) — đã tắt Deal Analyzer trên deal-monitor để tiết kiệm quota cho demo, cân nhắc key riêng/billing nếu cần chạy ổn định lâu dài |
 | Quyết định có mở rộng `classifyQuestionType` (nhãn `order`) thành hệ thống theo dõi đơn hàng thật không | `backend/src/utils/classify.js`, cần bảng `orders` mới nếu làm | Hiện chỉ là nhãn heuristic theo từ khoá, không có mã đơn/trạng thái/giá trị — nêu trong tài liệu Jollibee như hướng phát triển thêm, chưa triển khai |
 | Test gửi tin nhắn 1:1 thật (Zalo) qua Inbox mới | `admin/app/zenterprise/live/` | Backend đã chạy ổn định trên VPS mới, đã test gửi/nhận cơ bản — cần test thêm với recipient cụ thể trước khi dùng thật cho Jollibee |
 

@@ -29,7 +29,7 @@ interface CandidateRow extends MemberRow {
 
 export default async function GroupsPage() {
   const { t } = await getDict();
-  const [groups, savedMembers, candidates, inactiveGroups] = await Promise.all([
+  const [groups, savedMembers, topCandidates, inactiveGroups] = await Promise.all([
     query<GroupRow>(
       `SELECT group_id, name, group_type, branch, updated_at FROM group_names WHERE COALESCE(group_type,'customer') != 'direct' ORDER BY name`,
     ),
@@ -48,6 +48,14 @@ export default async function GroupsPage() {
     ),
     getInactiveGroups(3),
   ]);
+
+  // Người đã lưu trong gz_members nhưng không lọt top 50 candidate (ít tin nhắn) vẫn
+  // phải hiển thị được trong UI — nếu không sẽ "biến mất" dù đã có trong DB
+  const topCandidateUids = new Set(topCandidates.map(c => c.sender_uid));
+  const savedOnly: CandidateRow[] = savedMembers
+    .filter(m => !topCandidateUids.has(m.sender_uid))
+    .map(m => ({ ...m, msg_count: 0 }));
+  const candidates = [...topCandidates, ...savedOnly];
 
   return (
     <div className="flex min-h-screen bg-gray-50">

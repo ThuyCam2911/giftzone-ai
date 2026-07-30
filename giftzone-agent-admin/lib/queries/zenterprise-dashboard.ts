@@ -71,7 +71,7 @@ export async function getZDashOverview(from: string, to: string, groupIds?: stri
        FROM messages m
        LEFT JOIN group_names gn ON gn.group_id = m.group_id
        WHERE m.msg_ts >= $1 AND m.msg_ts <= $2
-         AND COALESCE(gn.group_type,'customer') NOT IN ('internal','direct')
+         AND COALESCE(gn.group_type,'customer') NOT IN ('internal')
          ${scoped ? 'AND m.group_id = ANY($3::text[])' : ''}`,
       scoped ? [fromTs, toTs, groupIds] : [fromTs, toTs],
     ),

@@ -15,6 +15,28 @@ const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
 
 const TOP_K = 5;
 
+// Retry cho lỗi tạm thời (429 rate limit / 503 model quá tải) — giống embedder.js
+async function generateWithRetry(prompt, retries = 3) {
+  for (let attempt = 0; attempt < retries; attempt++) {
+    try {
+      return await model.generateContent({
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        generationConfig: { temperature: 0.3, maxOutputTokens: 600 },
+      });
+    } catch (err) {
+      const status = err.status ?? (err.message?.match(/\[(\d{3})/)?.[1] && Number(err.message.match(/\[(\d{3})/)[1]));
+      const isRetryable = status === 429 || status === 503;
+      if (isRetryable && attempt < retries - 1) {
+        const wait = Math.pow(2, attempt) * 2000; // 2s, 4s, 8s
+        log.warn(`Gemini ${status} — đợi ${wait / 1000}s rồi thử lại (lần ${attempt + 1}/${retries})`);
+        await new Promise(r => setTimeout(r, wait));
+      } else {
+        throw err;
+      }
+    }
+  }
+}
+
 const SYSTEM_PROMPT = `Bạn là ${process.env.AGENT_NAME ?? 'GiftZone AI'} — AI hỗ trợ đội Sales của GiftZone.
 
 Nhiệm vụ:
@@ -77,10 +99,7 @@ ${historyBlock}
 
 Câu hỏi của Sales: ${userQuery}`;
 
-  const result = await model.generateContent({
-    contents: [{ role: 'user', parts: [{ text: prompt }] }],
-    generationConfig: { temperature: 0.3, maxOutputTokens: 600 }, // reply ngắn gọn theo design.md (5-7 dòng)
-  });
+  const result = await generateWithRetry(prompt);
   const answerText = result.response.text() ?? 'Có lỗi xảy ra, vui lòng thử lại.';
   const sources = [...new Set(chunks.map(c => c.file_name))];
   const latency_ms = Date.now() - start;

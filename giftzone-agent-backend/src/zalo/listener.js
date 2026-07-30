@@ -98,6 +98,7 @@ export class GroupListener {
           query:     content.trim(),
           ts,
           isDirect:  true,
+          isGzMember: isGz,
         });
       }
       return;
@@ -137,6 +138,7 @@ export class GroupListener {
         query:     userQuery,
         ts,
         isDirect:  false,
+        isGzMember: isGz,
       });
     }
   }
