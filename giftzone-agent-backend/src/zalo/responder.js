@@ -111,12 +111,13 @@ export class MentionResponder {
       // chỉ Ops Assistant ở trên mới được phép trả lời
       if (!this.enableRagDocs) return;
 
-      // Kèm 3 lượt hỏi-đáp gần nhất của người này để hỏi nối được (cả 1:1 lẫn @mention trong group —
-      // query đã lọc theo sender_uid nên không lẫn ngữ cảnh giữa nhiều người)
-      const history = await this._fetchHistory(senderUid);
+      // Bối cảnh hội thoại: bản tóm tắt do chính AI tự sinh ở lượt trước (không phải lịch sử thô)
+      // — áp dụng cho cả 1:1 lẫn @mention trong group, theo đúng người hỏi (sender_uid)
+      const contextSummary = await this._fetchContextSummary(senderUid);
 
-      const result = await answer(userQuery, history);
+      const result = await answer(userQuery, contextSummary);
       await this._send(groupId, result.answer, isDirect);
+      await this._saveContextSummary(senderUid, result.context_summary);
 
       await this._logInteraction({
         groupId,
@@ -136,18 +137,29 @@ export class MentionResponder {
     }
   }
 
-  // 3 lượt hỏi-đáp gần nhất trong 1 giờ của user (cho follow-up 1:1)
-  async _fetchHistory(senderUid) {
+  // Đọc bản tóm tắt bối cảnh — hết hạn sau 2 giờ không hỏi tiếp (coi như hội thoại mới)
+  async _fetchContextSummary(senderUid) {
     try {
       const { rows } = await query(
-        `SELECT query, answer FROM ai_logs
-         WHERE sender_uid = $1 AND created_at >= NOW() - INTERVAL '1 hour'
-         ORDER BY created_at DESC LIMIT 3`,
+        `SELECT summary FROM conversation_context
+         WHERE sender_uid = $1 AND updated_at >= NOW() - INTERVAL '2 hours'`,
         [senderUid]
       );
-      return rows.reverse(); // cũ → mới
+      return rows[0]?.summary ?? '';
     } catch {
-      return [];
+      return '';
+    }
+  }
+
+  async _saveContextSummary(senderUid, summary) {
+    try {
+      await query(
+        `INSERT INTO conversation_context (sender_uid, summary, updated_at) VALUES ($1, $2, NOW())
+         ON CONFLICT (sender_uid) DO UPDATE SET summary = $2, updated_at = NOW()`,
+        [senderUid, summary ?? '']
+      );
+    } catch (err) {
+      log.error('Lưu context summary lỗi', err.message);
     }
   }
 

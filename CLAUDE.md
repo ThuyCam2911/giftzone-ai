@@ -118,6 +118,7 @@ src/
 - `listener.js` — handles `DirectMessage` (1:1, no @mention needed) and `GroupMessage` (@mention required); emits `onMention(ctx)` with `isDirect` flag
 - `responder.js` — uses `MessageType.DirectMessage` when `ctx.isDirect=true`, `GroupMessage` otherwise; calls `answer()` directly, no thinking message, no source citation
 - `embedder.js` — `outputDimensionality: 1536` (HNSW limit is 2000; default 3072 exceeds it); exponential backoff on 429
+- `retriever.js` — context hội thoại dùng bảng `conversation_context` (1 dòng tóm tắt/`sender_uid`, tự AI sinh ra, hết hạn sau 2h) thay vì lịch sử thô — xem Critical Decisions Log → Backend
 - `indexer.js` — 600ms delay between chunks (critical for free-tier rate limit); polls Drive Changes API every **24h** (reduced from 15min to preserve embedding quota)
 - `analyzer.js` — model fallback chain; XML tags around conversation to prevent prompt injection; 60s delay between groups; role-based tagging `[GZ-Sales]`/`[GZ-CS]`/`[GZ-Manager]`/`[GZ-Tech]`/`[KH]` (no-op if table empty); writes `analyzer_status=degraded` to settings when entire chain fails. **Chạy trên cả nhóm nhiều người lẫn thread 1:1** — chỉ loại trừ `group_type='internal'`, không loại trừ `direct`
 - `cookie-extractor.js` — safety: requires `zpsid`/`zpw_sek` and ≥3 cookies before writing DB; does NOT run at startup
@@ -212,6 +213,7 @@ types/
 | `deal_events` | Deal stage change history |
 | `sales_issues` | Quality issues detected by analyzer (open/resolved) |
 | `zenterprise_accounts` | zEnterprise account CRUD — `account_name`, `phone`, `branch`, `role`, `status`, `linked_sender_uid` (optional link tới dữ liệu thật trong `messages`/`ai_logs`) |
+| `conversation_context` | `sender_uid` (PK) + `summary` — bản tóm tắt hội thoại do chính AI tự sinh, dùng làm context cho RAG thay vì lịch sử thô (xem `retriever.js`) |
 
 All timestamps: `TIMESTAMPTZ`. Group/User IDs: `TEXT` (Zalo IDs are large numbers, string is safer).
 
@@ -317,6 +319,7 @@ INSTANCE_ID           # đặt trên deal-monitor để tách cookie DB key riê
 - **`MessageType.DirectMessage` for 1:1**: zca-js enum is `DirectMessage=0`, NOT `UserMessage` — wrong type = no messages received
 - **`PG_DATABASE` required on Render**: Default `giftzone_agent` only exists in local Docker; Render needs `PG_DATABASE=postgres`
 - **`better-sqlite3` is `optionalDependencies`**: Native module needed only on local Mac with Chrome; must not crash on Render build
+- **Self-summarizing context thay vì lịch sử thô (2026-07-31)**: `_fetchHistory()` cũ lấy 3 cặp Q&A gần nhất (cắt 300 ký tự/câu) — hết bối cảnh sau vài lượt hỏi nối, và prompt phình to dần theo hội thoại. Đổi sang: mỗi câu trả lời của Claude kèm 1 dòng ẩn `@@CONTEXT@@ <tóm tắt ≤40 từ>` ở cuối (parse ra, không hiển thị cho user), lưu vào bảng `conversation_context` (1 dòng/`sender_uid`, hết hạn sau 2h). Lượt hỏi tiếp theo dùng bản tóm tắt này làm context — kích thước prompt cố định dù hội thoại dài bao nhiêu, không tốn thêm 1 lệnh gọi API riêng để tóm tắt
 
 ### Deal Analyzer
 - **Dùng Claude (`ANTHROPIC_API_KEY`), không còn Gemini/OpenRouter**: OpenRouter's free MODEL_CHAIN (llama-3.3-70b, deepseek-r1, gemma-3-27b) rệu rã ban đầu → đổi sang Gemini `gemini-2.5-flash-lite` → nhưng free-tier chỉ 20 request/ngày dùng chung với RAG/Ops/Summary nên hay hết quota giữa chừng → migrate hẳn sang Claude API (2026-07-30) qua `src/utils/claude.js:generateText()` (có billing, retry sẵn 429/529)

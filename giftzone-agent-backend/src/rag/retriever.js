@@ -2,6 +2,9 @@
  * RAG Retriever
  * - Nhận câu hỏi → embed (Gemini) → tìm top-k chunks gần nhất trong pgvector
  * - Gọi Claude API với context → trả về câu trả lời + nguồn trích dẫn
+ * - Context hội thoại: thay vì nhồi lịch sử thô (dài dần theo số lượt hỏi),
+ *   AI tự sinh 1 dòng tóm tắt ẩn ở cuối mỗi câu trả lời, dùng làm context cho
+ *   lượt hỏi tiếp theo — giữ prompt gọn, không mất ngữ cảnh sau vài lượt
  */
 import { generateText } from '../utils/claude.js';
 import { embed } from './embedder.js';
@@ -11,6 +14,7 @@ import { createLogger } from '../utils/logger.js';
 const log = createLogger('Retriever');
 
 const TOP_K = 5;
+const CONTEXT_MARKER = '@@CONTEXT@@';
 
 const SYSTEM_PROMPT = `Bạn là ${process.env.AGENT_NAME ?? 'GiftZone AI'} — AI hỗ trợ đội Sales của GiftZone.
 
@@ -21,9 +25,11 @@ Nhiệm vụ:
 - KHÔNG trích dẫn nguồn hay số thứ tự tài liệu trong câu trả lời
 - Trả lời ngắn gọn, súc tích, dễ đọc trên Zalo mobile
 - Dùng tiếng Việt, tone thân thiện, chuyên nghiệp
-- Nếu câu hỏi mơ hồ → hỏi lại để làm rõ`;
+- Nếu câu hỏi mơ hồ → hỏi lại để làm rõ
 
-export async function answer(userQuery, history = []) {
+Sau khi trả lời xong, LUÔN thêm 1 dòng MỚI ở cuối bắt đầu bằng "${CONTEXT_MARKER}" theo sau là bản tóm tắt ngắn gọn (dưới 40 từ, tiếng Việt) về bối cảnh hội thoại tính đến hiện tại (đang hỏi về chủ đề/sản phẩm gì, đã tư vấn những gì) — dòng này CHỈ để hệ thống dùng nội bộ cho câu hỏi tiếp theo của cùng người này, không phải nội dung trả lời cho Sales.`;
+
+export async function answer(userQuery, contextSummary = '') {
   const start = Date.now();
   log.info(`Query: "${userQuery}"`);
 
@@ -47,6 +53,7 @@ export async function answer(userQuery, history = []) {
       latency_ms: Date.now() - start,
       is_answered: false,
       top_score: 0,
+      context_summary: contextSummary,
     };
   }
 
@@ -57,28 +64,33 @@ export async function answer(userQuery, history = []) {
     .map((c, i) => `[${i + 1}] Từ "${c.file_name}":\n${c.content}`)
     .join('\n\n---\n\n');
 
-  // 4. Gọi Gemini (kèm lịch sử hỏi-đáp gần nhất nếu có — cho phép hỏi nối trong 1:1)
-  const historyBlock = history.length > 0
-    ? `\nLịch sử hỏi-đáp gần đây với người này (để hiểu ngữ cảnh câu hỏi nối):\n`
-      + history.map(h => `Hỏi: ${h.query}\nĐáp: ${String(h.answer).slice(0, 300)}`).join('\n---\n')
-      + '\n'
+  const contextBlock = contextSummary
+    ? `\nBối cảnh hội thoại trước đó với người này: ${contextSummary}\n`
     : '';
 
   const prompt = `Tài liệu tham khảo:
 
 ${context}
-${historyBlock}
+${contextBlock}
 ---
 
 Câu hỏi của Sales: ${userQuery}`;
 
-  const answerText = await generateText(prompt, { system: SYSTEM_PROMPT, temperature: 0.3, maxTokens: 600 })
+  const raw = await generateText(prompt, { system: SYSTEM_PROMPT, temperature: 0.3, maxTokens: 650 })
     ?? 'Có lỗi xảy ra, vui lòng thử lại.';
+
+  // Tách phần trả lời (hiển thị cho user) và dòng tóm tắt ẩn (lưu làm context tiếp theo)
+  const markerIdx = raw.lastIndexOf(CONTEXT_MARKER);
+  const answerText = (markerIdx === -1 ? raw : raw.slice(0, markerIdx)).trim();
+  const newContextSummary = markerIdx === -1
+    ? contextSummary // model không tuân thủ format — giữ nguyên context cũ thay vì mất trắng
+    : raw.slice(markerIdx + CONTEXT_MARKER.length).trim();
+
   const sources = [...new Set(chunks.map(c => c.file_name))];
   const latency_ms = Date.now() - start;
   const is_answered = topScore >= 0.5 && !answerText.includes('chưa có thông tin') && !answerText.includes('chưa được cấp tài liệu');
 
   log.info(`Trả lời trong ${latency_ms}ms, score=${topScore.toFixed(2)}, ${sources.length} nguồn: ${sources.join(', ')}`);
 
-  return { answer: answerText, sources, latency_ms, is_answered, top_score: topScore };
+  return { answer: answerText, sources, latency_ms, is_answered, top_score: topScore, context_summary: newContextSummary };
 }

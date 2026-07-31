@@ -235,5 +235,16 @@ export async function initSchema() {
     )
   `);
 
+  // RAG follow-up context — bản tóm tắt ngắn gọn (không phải lịch sử thô) do chính
+  // AI tự sinh ra sau mỗi lượt trả lời, dùng làm context cho câu hỏi tiếp theo của
+  // người này — giữ prompt gọn dù hội thoại dài, xem retriever.js
+  await query(`
+    CREATE TABLE IF NOT EXISTS conversation_context (
+      sender_uid TEXT PRIMARY KEY,
+      summary    TEXT NOT NULL DEFAULT '',
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+
   log.info('Schema sẵn sàng ✓');
 }
