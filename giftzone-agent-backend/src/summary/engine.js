@@ -25,19 +25,6 @@ export async function fetchMessages(groupId, since) {
   return result.rows;
 }
 
-// ─── Lấy group IDs nội bộ đang active ────────────────────────────────────────
-// CHỈ nhóm internal — summary chứa nhận định nội bộ, không được gửi vào nhóm khách
-async function getActiveGroups(since) {
-  const result = await query(
-    `SELECT DISTINCT m.group_id
-     FROM messages m
-     INNER JOIN group_names gn ON gn.group_id = m.group_id
-     WHERE m.msg_ts >= $1 AND gn.group_type = 'internal'`,
-    [since]
-  );
-  return result.rows.map(r => r.group_id);
-}
-
 // ─── Tạo summary bằng Claude ──────────────────────────────────────────────────
 export async function generateSummary(messages, type = 'daily') {
   if (messages.length === 0) return null;
@@ -121,19 +108,22 @@ async function runDailySummary(api) {
 }
 
 // ─── Weekly summary job ───────────────────────────────────────────────────────
+// Chỉ gửi vào 1 nhóm monitoring duy nhất, giống daily summary (không phát cho mọi nhóm internal đang active)
 async function runWeeklySummary(api) {
   log.info('Chạy weekly summary...');
   const since = new Date();
   since.setDate(since.getDate() - 7);
 
-  const groups = await getActiveGroups(since);
-  for (const groupId of groups) {
-    const messages = await fetchMessages(groupId, since);
-    if (messages.length < 10) continue;
+  const groupId = getConfig('daily_summary_group_id', process.env.DAILY_SUMMARY_GROUP_ID ?? '5666015708994110958');
 
-    const summary = await generateSummary(messages, 'weekly');
-    if (summary) await sendSummary(api, groupId, summary);
+  const messages = await fetchMessages(groupId, since);
+  if (messages.length < 10) {
+    log.info('Không đủ tin nhắn để tạo weekly summary');
+    return;
   }
+
+  const summary = await generateSummary(messages, 'weekly');
+  if (summary) await sendSummary(api, groupId, summary);
 }
 
 // ─── Khởi động schedulers ─────────────────────────────────────────────────────
