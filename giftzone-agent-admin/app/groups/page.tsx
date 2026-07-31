@@ -1,9 +1,9 @@
 export const dynamic = 'force-dynamic';
 
-import Link from 'next/link';
 import Sidebar from '@/components/Sidebar';
 import GroupTypeManager from '@/components/GroupTypeManager';
 import GZMemberManager from '@/components/GZMemberManager';
+import InactiveGroupsList from '@/components/InactiveGroupsList';
 import { query } from '@/lib/db';
 import { getInactiveGroups } from '@/lib/queries/group-detail';
 import { getDict } from '@/lib/i18n/server';
@@ -79,25 +79,7 @@ export default async function GroupsPage() {
               <p className="text-xs text-gray-400 mb-3">
                 {t('groups.inactiveSub')}
               </p>
-              <div className="bg-white rounded-xl border border-amber-100 divide-y divide-gray-50">
-                {inactiveGroups.map(g => (
-                  <Link
-                    key={g.group_id}
-                    href={`/groups/${g.group_id}`}
-                    className="flex items-center justify-between px-4 py-3 hover:bg-amber-50 transition-colors"
-                  >
-                    <span className="text-sm font-medium text-gray-800">
-                      {g.name}
-                    </span>
-                    <span className="text-xs shrink-0 px-2 py-0.5 rounded-full font-medium"
-                      style={g.days_silent >= 7
-                        ? { background: '#fef2f2', color: '#b91c1c' }
-                        : { background: '#fff7ed', color: '#c2410c' }}>
-                      {g.days_silent} {t('groups.daysSilent')}
-                    </span>
-                  </Link>
-                ))}
-              </div>
+              <InactiveGroupsList groups={inactiveGroups} />
             </section>
           )}
 

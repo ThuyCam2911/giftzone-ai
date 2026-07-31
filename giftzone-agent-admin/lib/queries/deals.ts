@@ -61,6 +61,7 @@ export async function getDealsData(from: string, to: string, locale: Locale = 'v
        WHERE s.detected_at >= $1 AND s.detected_at <= $2
          AND COALESCE(gn.group_type, 'customer') != 'internal'
        ORDER BY
+         CASE s.status WHEN 'resolved' THEN 1 ELSE 0 END,
          CASE s.severity WHEN 'critical' THEN 1 WHEN 'high' THEN 2 WHEN 'medium' THEN 3 ELSE 4 END,
          s.detected_at DESC`,
       [fromTs, toTs],

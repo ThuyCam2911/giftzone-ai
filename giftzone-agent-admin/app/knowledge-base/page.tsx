@@ -3,6 +3,9 @@ import Sidebar from '@/components/Sidebar';
 import { useEffect, useState, useRef } from 'react';
 import { FileText, Paperclip } from 'lucide-react';
 import { useLocale } from '@/components/LocaleProvider';
+import Pagination from '@/components/ui/Pagination';
+
+const FILES_PAGE_SIZE = 10;
 
 interface FileRow { file_name: string; chunks: string; last_indexed: string }
 interface StatsData {
@@ -19,6 +22,7 @@ export default function KnowledgeBasePage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput]   = useState('');
   const [loading, setLoading] = useState(false);
+  const [filesPage, setFilesPage] = useState(1);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -53,6 +57,8 @@ export default function KnowledgeBasePage() {
 
   const topCount = Math.max(...(stats?.topQuestions.map(q => Number(q.count)) ?? [1]));
   const docMax   = Math.max(...(stats?.docUsage.map(d => Number(d.count)) ?? [1]));
+  const filesPages = Math.ceil(files.length / FILES_PAGE_SIZE);
+  const pagedFiles = files.slice((filesPage - 1) * FILES_PAGE_SIZE, filesPage * FILES_PAGE_SIZE);
 
   return (
     <div className="flex min-h-screen bg-gray-50">
@@ -76,7 +82,7 @@ export default function KnowledgeBasePage() {
                 <p className="text-xs text-gray-400">{t('kb.noDocs')}</p>
               )}
               <ul className="space-y-2">
-                {files.map(f => (
+                {pagedFiles.map(f => (
                   <li key={f.file_name} className="flex items-start gap-2">
                     <FileText size={14} className="text-gray-400 mt-0.5 shrink-0" strokeWidth={1.75} />
                     <div className="min-w-0">
@@ -86,6 +92,11 @@ export default function KnowledgeBasePage() {
                   </li>
                 ))}
               </ul>
+              <Pagination
+                page={filesPage}
+                totalPages={filesPages}
+                onPageChange={setFilesPage}
+              />
             </div>
 
             {/* Chat */}

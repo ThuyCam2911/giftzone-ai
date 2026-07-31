@@ -3,6 +3,9 @@
 import { useState } from 'react';
 import { Users, Save } from 'lucide-react';
 import { useLocale } from '@/components/LocaleProvider';
+import Pagination from '@/components/ui/Pagination';
+
+const PAGE_SIZE = 10;
 
 interface Member {
   sender_uid: string;
@@ -37,6 +40,7 @@ export default function GZMemberManager({ saved: initialSaved, candidates }: Pro
   const [saving, setSaving] = useState(false);
   const [savedOk, setSavedOk] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
 
   function toggle(uid: string, defaultRole = 'sales') {
     setSelected(prev => {
@@ -100,6 +104,9 @@ export default function GZMemberManager({ saved: initialSaved, candidates }: Pro
   const hasChanged = selected.size !== savedUids.size ||
     [...selected.entries()].some(([uid, role]) => !savedUids.has(uid) || savedRoleMap[uid] !== role);
 
+  const totalPages = Math.ceil(candidates.length / PAGE_SIZE);
+  const pagedCandidates = candidates.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
   return (
     <div className="space-y-3">
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
@@ -118,7 +125,7 @@ export default function GZMemberManager({ saved: initialSaved, candidates }: Pro
         </p>
 
         <ul className="divide-y divide-gray-50">
-          {candidates.map(c => {
+          {pagedCandidates.map(c => {
             const isSelected = selected.has(c.sender_uid);
             const role = selected.get(c.sender_uid) ?? 'sales';
             return (
@@ -163,6 +170,7 @@ export default function GZMemberManager({ saved: initialSaved, candidates }: Pro
             );
           })}
         </ul>
+        <Pagination page={page} totalPages={totalPages} onPageChange={setPage} />
       </div>
 
       {error && (

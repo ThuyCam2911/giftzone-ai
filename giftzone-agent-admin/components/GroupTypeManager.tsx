@@ -1,6 +1,9 @@
 'use client';
 import { useState } from 'react';
 import { useLocale } from '@/components/LocaleProvider';
+import Pagination from '@/components/ui/Pagination';
+
+const PAGE_SIZE = 10;
 
 interface GroupRow {
   group_id: string;
@@ -15,6 +18,7 @@ export default function GroupTypeManager({ groups: initial }: { groups: GroupRow
   const [groups, setGroups] = useState(initial);
   const [saving, setSaving] = useState<string | null>(null);
   const [branchDraft, setBranchDraft] = useState<Record<string, string>>({});
+  const [page, setPage] = useState(1);
 
   async function saveBranch(groupId: string) {
     const branch = (branchDraft[groupId] ?? '').trim();
@@ -53,9 +57,12 @@ export default function GroupTypeManager({ groups: initial }: { groups: GroupRow
     );
   }
 
+  const totalPages = Math.ceil(groups.length / PAGE_SIZE);
+  const paged = groups.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
   return (
     <div className="bg-white rounded-xl border border-gray-200 divide-y divide-gray-100">
-      {groups.map(g => {
+      {paged.map(g => {
         const cfg = TYPE_CONFIG[g.group_type as keyof typeof TYPE_CONFIG] ?? TYPE_CONFIG.unknown;
         return (
           <div key={g.group_id} className="px-5 py-4 flex items-center gap-4 flex-wrap">
@@ -106,6 +113,7 @@ export default function GroupTypeManager({ groups: initial }: { groups: GroupRow
           </div>
         );
       })}
+      <Pagination page={page} totalPages={totalPages} onPageChange={setPage} />
     </div>
   );
 }

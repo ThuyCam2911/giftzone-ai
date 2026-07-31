@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import type { SalesIssue, GroupQualityRow, DealsStats } from '@/types';
 import { useLocale } from '@/components/LocaleProvider';
+import Pagination from '@/components/ui/Pagination';
 
 interface Props {
   stats: DealsStats;
@@ -26,6 +27,7 @@ function scoreColor(score: number) {
 }
 
 const GROUP_PAGE_SIZE = 10;
+const ISSUE_PAGE_SIZE = 10;
 
 type SortKey = 'msg_count' | 'quality_score' | 'open_issues' | 'ai_queries';
 
@@ -68,6 +70,7 @@ export default function DealsPage({ stats, issues: initialIssues, groups, aiInsi
     }
   }
   const [groupPage, setGroupPage] = useState(1);
+  const [issuePage, setIssuePage] = useState(1);
   const [sortKey, setSortKey] = useState<SortKey>('msg_count');
   const [sortAsc, setSortAsc] = useState(false);
   const [filterSeverity, setFilterSeverity] = useState<string>('');
@@ -88,6 +91,14 @@ export default function DealsPage({ stats, issues: initialIssues, groups, aiInsi
   const recentFeed = [...issues]
     .sort((a, b) => new Date(b.detected_at).getTime() - new Date(a.detected_at).getTime())
     .slice(0, 15);
+
+  // Issue table: đã giải quyết luôn sắp xuống dưới (sort ổn định — giữ nguyên thứ tự
+  // severity/detected_at gốc trong từng nhóm open/resolved)
+  const sortedIssues = [...issues].sort((a, b) =>
+    (a.status === 'resolved' ? 1 : 0) - (b.status === 'resolved' ? 1 : 0)
+  );
+  const issuePages = Math.ceil(sortedIssues.length / ISSUE_PAGE_SIZE);
+  const pagedIssues = sortedIssues.slice((issuePage - 1) * ISSUE_PAGE_SIZE, issuePage * ISSUE_PAGE_SIZE);
 
   // Group table: filter + sort + paginate
   const filteredGroups = groups.filter(g =>
@@ -325,7 +336,7 @@ export default function DealsPage({ stats, issues: initialIssues, groups, aiInsi
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {issues.map(issue => {
+                    {pagedIssues.map(issue => {
                       const sev = SEVERITY_STYLE[issue.severity] ?? SEVERITY_STYLE.medium;
                       const sts = STATUS_STYLE[issue.status] ?? STATUS_STYLE.open;
                       const isExpanded = expanded === issue.id;
@@ -397,6 +408,13 @@ export default function DealsPage({ stats, issues: initialIssues, groups, aiInsi
                 </table>
               </div>
             )}
+            <Pagination
+              page={issuePage}
+              totalPages={issuePages}
+              onPageChange={setIssuePage}
+              totalItems={sortedIssues.length}
+              itemLabel={t('deals.issuesInPeriod')}
+            />
           </div>
         </div>
 
