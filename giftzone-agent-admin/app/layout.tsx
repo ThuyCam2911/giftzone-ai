@@ -7,7 +7,7 @@ import { getLocale } from "@/lib/i18n/server";
 const manrope = Manrope({ subsets: ["latin"], variable: "--font-manrope" });
 
 export const metadata: Metadata = {
-  title: "GiftZone Dashboard",
+  title: "The Master Layer",
   description: "Quản lý GiftZone AI Agent",
 };
 
