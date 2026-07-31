@@ -58,7 +58,7 @@ const vi = {
   'sidebar.groups': 'Nhóm Zalo',
   'sidebar.settings': 'Cài đặt',
   'sidebar.appName': 'GiftZone',
-  'sidebar.appSubtitle': 'AI Dashboard',
+  'sidebar.appSubtitle': 'The Master Layer',
   'sidebar.language': 'Ngôn ngữ',
 
   // ── Login ───────────────────────────────────────────────────────────────
@@ -508,7 +508,7 @@ const en: Record<DictKey, string> = {
   'sidebar.groups': 'Zalo Groups',
   'sidebar.settings': 'Settings',
   'sidebar.appName': 'GiftZone',
-  'sidebar.appSubtitle': 'AI Dashboard',
+  'sidebar.appSubtitle': 'The Master Layer',
   'sidebar.language': 'Language',
 
   // ── Login ───────────────────────────────────────────────────────────────
