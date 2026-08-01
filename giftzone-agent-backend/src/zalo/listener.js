@@ -47,7 +47,8 @@ export class GroupListener {
     });
 
     api.listener.on('closed', () => {
-      log.error('WebSocket closed — kiểm tra Zalo Web có đang mở trên browser không');
+      log.error('WebSocket closed — kiểm tra Zalo Web có đang mở trên browser không. Thoát tiến trình để Docker (--restart unless-stopped) tự khởi động lại và đăng nhập lại WebSocket mới.');
+      process.exit(1);
     });
 
     api.listener.on('error', (err) => {
