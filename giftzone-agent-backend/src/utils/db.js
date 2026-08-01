@@ -246,5 +246,18 @@ export async function initSchema() {
     )
   `);
 
+  // Tóm tắt theo ngày/nhóm — cache để trả lời "tóm tắt N ngày qua" mà không phải
+  // đọc lại raw chat của các ngày đã qua (chỉ ngày hôm nay mới tóm tắt tươi từ
+  // raw messages), xem summary/engine.js:getOrBuildDailySummary()
+  await query(`
+    CREATE TABLE IF NOT EXISTS group_daily_summaries (
+      group_id     TEXT NOT NULL,
+      summary_date DATE NOT NULL,
+      summary      TEXT NOT NULL,
+      created_at   TIMESTAMPTZ DEFAULT NOW(),
+      PRIMARY KEY (group_id, summary_date)
+    )
+  `);
+
   log.info('Schema sẵn sàng ✓');
 }

@@ -14,15 +14,67 @@ import { createLogger } from '../utils/logger.js';
 const log = createLogger('Summary');
 
 // ─── Lấy tin nhắn trong khoảng thời gian ─────────────────────────────────────
-export async function fetchMessages(groupId, since) {
+export async function fetchMessages(groupId, since, until = null) {
   const result = await query(
-    `SELECT sender_name, content, msg_ts
-     FROM messages
-     WHERE group_id = $1 AND msg_ts >= $2
-     ORDER BY msg_ts ASC`,
-    [groupId, since]
+    until
+      ? `SELECT sender_name, content, msg_ts FROM messages
+         WHERE group_id = $1 AND msg_ts >= $2 AND msg_ts <= $3
+         ORDER BY msg_ts ASC`
+      : `SELECT sender_name, content, msg_ts FROM messages
+         WHERE group_id = $1 AND msg_ts >= $2
+         ORDER BY msg_ts ASC`,
+    until ? [groupId, since, until] : [groupId, since]
   );
   return result.rows;
+}
+
+// ─── Ngày theo giờ Việt Nam — dùng để tách raw chat "hôm nay" khỏi các ngày đã
+// chốt (đã có summary lưu sẵn), tránh phụ thuộc timezone của server (VPS chạy UTC)
+export function todayVN(offsetDays = 0) {
+  return new Date(Date.now() + offsetDays * 86400000)
+    .toLocaleDateString('sv-SE', { timeZone: 'Asia/Ho_Chi_Minh' }); // "YYYY-MM-DD"
+}
+
+export function startOfDayVN(dateStr = todayVN()) {
+  return new Date(`${dateStr}T00:00:00+07:00`);
+}
+
+function endOfDayVN(dateStr) {
+  return new Date(`${dateStr}T23:59:59+07:00`);
+}
+
+// ─── Tóm tắt "hôm nay" — luôn tươi từ raw messages, KHÔNG cache (ngày chưa kết
+// thúc nên chưa chốt được nội dung) ──────────────────────────────────────────
+export async function buildTodaySummary(groupId) {
+  const messages = await fetchMessages(groupId, startOfDayVN());
+  if (messages.length < 3) return null;
+  return generateSummary(messages, 'daily');
+}
+
+// ─── Tóm tắt 1 ngày đã qua — ưu tiên đọc từ cache `group_daily_summaries`, chỉ
+// đọc lại raw messages của đúng ngày đó khi chưa có cache. Tiết kiệm token khi
+// người dùng hỏi tóm tắt nhiều ngày: không gộp raw chat của các ngày trước vào
+// 1 lượt gọi AI như trước, mỗi ngày chỉ tóm tắt 1 lần rồi lưu lại dùng mãi ──────
+export async function getOrBuildDailySummary(groupId, dateStr) {
+  const cached = await query(
+    `SELECT summary FROM group_daily_summaries WHERE group_id = $1 AND summary_date = $2`,
+    [groupId, dateStr]
+  );
+  if (cached.rows[0]) return cached.rows[0].summary;
+
+  const messages = await fetchMessages(groupId, startOfDayVN(dateStr), endOfDayVN(dateStr));
+  if (messages.length < 3) return null;
+
+  const summary = await generateSummary(messages, 'daily');
+  if (summary) {
+    await query(
+      `INSERT INTO group_daily_summaries (group_id, summary_date, summary)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (group_id, summary_date) DO UPDATE SET summary = $3`,
+      [groupId, dateStr, summary]
+    );
+  }
+  return summary;
 }
 
 // ─── Tạo summary bằng Claude ──────────────────────────────────────────────────

@@ -6,7 +6,7 @@
  */
 import { generateText } from '../utils/claude.js';
 import { query } from '../utils/db.js';
-import { fetchMessages, generateSummary } from '../summary/engine.js';
+import { buildTodaySummary, getOrBuildDailySummary, todayVN } from '../summary/engine.js';
 import { createLogger } from '../utils/logger.js';
 
 const log = createLogger('OpsAssistant');
@@ -108,6 +108,15 @@ async function findGroup(groupName) {
      WHERE name ILIKE $1 AND COALESCE(group_type,'customer') != 'direct'
      ORDER BY LENGTH(name) ASC LIMIT 1`,
     [`%${groupName}%`]
+  );
+  return rows[0] ?? null;
+}
+
+async function getGroupById(groupId) {
+  if (!groupId) return null;
+  const { rows } = await query(
+    `SELECT group_id, name, group_type FROM group_names WHERE group_id = $1`,
+    [groupId]
   );
   return rows[0] ?? null;
 }
@@ -256,42 +265,68 @@ Câu hỏi của quản lý: ${userQuery}`;
 }
 
 // ─── Tóm tắt nhóm theo yêu cầu ───────────────────────────────────────────────
-async function summarizeOnDemand(groupName, days) {
-  if (!groupName) {
-    return 'Bạn muốn tóm tắt nhóm nào? Ví dụ: "tóm tắt nhóm Vua nệm 3 ngày qua"';
-  }
-  const group = await findGroup(groupName);
-  if (!group) {
+// Mỗi ngày chỉ tóm tắt riêng (không gộp raw chat nhiều ngày vào 1 lượt gọi AI):
+// - Hôm nay: luôn tóm tắt tươi từ raw messages (ngày chưa xong, chưa "chốt")
+// - Ngày trước: lấy từ cache group_daily_summaries, chỉ tóm tắt lại nếu chưa có
+//   → không đọc lại raw chat của ngày đã qua, tiết kiệm token
+async function summarizeOnDemand(groupName, days, currentGroupId) {
+  const group = groupName ? await findGroup(groupName) : await getGroupById(currentGroupId);
+  if (groupName && !group) {
     return `Tôi không tìm thấy nhóm nào tên giống "${groupName}".`;
+  }
+  if (!group) {
+    return 'Bạn muốn tóm tắt nhóm nào? Ví dụ: "tóm tắt nhóm Vua nệm 3 ngày qua"';
   }
 
   const numDays = Math.min(Math.max(Number(days) || 1, 1), 14); // 1–14 ngày
-  const since = new Date(Date.now() - numDays * 86400000);
-  const messages = await fetchMessages(group.group_id, since);
 
-  if (messages.length < 3) {
-    return `Nhóm "${group.name}" chỉ có ${messages.length} tin nhắn trong ${numDays} ngày qua — không đủ để tóm tắt.`;
+  if (numDays === 1) {
+    const summary = await buildTodaySummary(group.group_id);
+    if (!summary) {
+      return `Nhóm "${group.name}" hôm nay chưa có đủ tin nhắn để tóm tắt.`;
+    }
+    return `📋 Tóm tắt nhóm "${group.name}" — hôm nay:\n\n${summary}`;
   }
 
-  const summary = await generateSummary(messages, 'daily');
-  return `📋 Tóm tắt nhóm "${group.name}" — ${numDays} ngày qua:\n\n${summary}`;
+  const days_ = [];
+  for (let i = numDays - 1; i >= 0; i--) {
+    const dateStr = todayVN(-i);
+    const summary = i === 0
+      ? await buildTodaySummary(group.group_id)
+      : await getOrBuildDailySummary(group.group_id, dateStr);
+    if (summary) days_.push(`— ${dateStr} —\n${summary}`);
+  }
+
+  if (days_.length === 0) {
+    return `Nhóm "${group.name}" không có đủ dữ liệu trong ${numDays} ngày qua để tóm tắt.`;
+  }
+  return `📋 Tóm tắt nhóm "${group.name}" — ${numDays} ngày qua:\n\n${days_.join('\n\n')}`;
 }
 
 // ─── Entry point ─────────────────────────────────────────────────────────────
 /**
+ * @param {object} [opts]
+ * @param {string} [opts.currentGroupId] nhóm hiện tại (dùng làm mặc định khi
+ *   người hỏi không nêu tên nhóm khác — vd @mention "tóm tắt" ngay trong nhóm đó)
+ * @param {boolean} [opts.summaryOnly] true khi caller chỉ cho phép intent
+ *   "summary" (vd @mention trong nhóm khách — không được lộ issues/KPI nội bộ)
  * @returns {Promise<{handled: boolean, answer?: string, intent?: string}>}
- *   handled=false → caller fallback về RAG docs
+ *   handled=false → caller fallback về RAG docs (hoặc im lặng nếu RAG tắt)
  */
-export async function handleInternalQuery(userQuery) {
+export async function handleInternalQuery(userQuery, { currentGroupId = null, summaryOnly = false } = {}) {
   const { intent, group_name, days } = await classifyIntent(userQuery);
   log.info(`Intent: ${intent}${group_name ? ` — nhóm "${group_name}"` : ''}`);
+
+  if (summaryOnly && intent !== 'summary') {
+    return { handled: false, intent: 'docs' };
+  }
 
   if (intent === 'ops') {
     const answer = await answerOps(userQuery, group_name);
     return { handled: true, answer, intent };
   }
   if (intent === 'summary') {
-    const answer = await summarizeOnDemand(group_name, days);
+    const answer = await summarizeOnDemand(group_name, days, currentGroupId);
     return { handled: true, answer, intent };
   }
   return { handled: false, intent: 'docs' };

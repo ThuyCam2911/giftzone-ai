@@ -87,9 +87,16 @@ export class MentionResponder {
       // Ops Assistant — trong nhóm internal, HOẶC 1:1 với nhân viên GiftZone (vd hỏi tóm tắt 1 đoạn chat)
       // (dữ liệu vận hành không cho khách thấy — cả 2 điều kiện đều đảm bảo người hỏi là nội bộ)
       await this._loadInternalGroups();
-      const opsEligible = (!isDirect && this._internalGroups.has(groupId)) || (isDirect && isGzMember);
-      if (opsEligible) {
-        const ops = await handleInternalQuery(userQuery);
+      const inInternalGroup = !isDirect && this._internalGroups.has(groupId);
+      const opsEligible = inInternalGroup || (isDirect && isGzMember);
+      // Nhóm khách (vd giftzone-deal-monitor): nhân viên GZ @mention hỏi "tóm tắt" vẫn
+      // được trả lời, nhưng CHỈ intent summary — không lộ issues/KPI nội bộ vào nhóm khách
+      const summaryOnlyEligible = !isDirect && !inInternalGroup && isGzMember;
+      if (opsEligible || summaryOnlyEligible) {
+        const ops = await handleInternalQuery(userQuery, {
+          currentGroupId: groupId,
+          summaryOnly: summaryOnlyEligible,
+        });
         if (ops.handled) {
           await this._send(groupId, ops.answer, isDirect);
           await this._logInteraction({
