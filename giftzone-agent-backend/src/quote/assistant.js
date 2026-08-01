@@ -120,7 +120,11 @@ async function resolvePendingReplies(text, pendingProducts) {
     return { resolved, priceRowsByProduct };
   }
 
-  for (const seg of splitSegments(text)) {
+  const segments = splitSegments(text);
+
+  // Bước 1: khớp theo tên sản phẩm được nhắc trong từng dòng (chính xác nhất,
+  // không phụ thuộc thứ tự)
+  for (const seg of segments) {
     const segLower = seg.toLowerCase();
     for (const p of pendingProducts) {
       if (resolved[p]) continue;
@@ -129,6 +133,19 @@ async function resolvePendingReplies(text, pendingProducts) {
       if (found) resolved[p] = found;
     }
   }
+
+  // Bước 2: fallback theo THỨ TỰ dòng — Sales hay trả lời tắt, không nhắc lại
+  // tên sản phẩm (vd "20 chai 500ml\n10 chai 100ml"), ngầm hiểu dòng N ứng với
+  // sản phẩm thứ N theo đúng thứ tự bot đã liệt kê lúc hỏi lại. Chỉ áp dụng khi
+  // số dòng khớp đúng số sản phẩm đang chờ, tránh gán nhầm khi số dòng lệch.
+  if (segments.length === pendingProducts.length) {
+    pendingProducts.forEach((p, i) => {
+      if (resolved[p]) return;
+      const found = extractQuantityAndUnit(segments[i], priceRowsByProduct[p]);
+      if (found) resolved[p] = found;
+    });
+  }
+
   return { resolved, priceRowsByProduct };
 }
 

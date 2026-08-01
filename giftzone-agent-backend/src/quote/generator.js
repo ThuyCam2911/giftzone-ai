@@ -45,14 +45,33 @@ export async function matchProduct(text) {
   return products.filter(p => q.includes(p.split(' ')[0].toLowerCase()));
 }
 
+// Lấy phần "kích cỡ" trong 1 chuỗi quy cách, vd "chai 500ml" → "500ml",
+// "can 1 lít" → "1lít" (bỏ khoảng trắng để so khớp khoan dung hơn)
+function sizeToken(unit) {
+  const m = (unit ?? '').match(/[\d.,]+\s*(ml|lít|kg|g)\b/i);
+  return m ? m[0].replace(/\s+/g, '').toLowerCase() : null;
+}
+
 // Khớp số lượng + đúng quy cách (unit) trong 1 câu trả lời của Sales, dựa vào
-// danh sách unit thật của sản phẩm đó (bot đã liệt kê khi hỏi lại trước đó)
+// danh sách unit thật của sản phẩm đó (bot đã liệt kê khi hỏi lại trước đó).
+// Ưu tiên khớp nguyên văn quy cách; nếu không có (vd Sales gõ "chai 1 lít"
+// nhưng quy cách thật là "can 1 lít" — sai từ chỉ loại bao bì) thì fallback
+// khớp theo riêng phần kích cỡ (500ml/1kg/1 lít...), khoan dung hơn với cách
+// Sales gõ tắt/nhầm từ bao bì.
 export function extractQuantityAndUnit(text, priceRows) {
   const qtyMatch = (text ?? '').match(/(\d+)/);
   if (!qtyMatch) return null;
   const qty = Number(qtyMatch[1]);
   const q = text.toLowerCase();
-  const row = priceRows.find(r => q.includes(r.unit.toLowerCase()));
+
+  let row = priceRows.find(r => q.includes(r.unit.toLowerCase()));
+  if (!row) {
+    const textNoSpace = q.replace(/\s+/g, '');
+    row = priceRows.find(r => {
+      const size = sizeToken(r.unit);
+      return size && textNoSpace.includes(size);
+    });
+  }
   if (!row) return null;
   return { qty, row };
 }
