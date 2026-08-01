@@ -13,6 +13,13 @@ import { createLogger } from '../utils/logger.js';
 
 const log = createLogger('Summary');
 
+// Giới hạn ký tự đưa vào prompt tóm tắt — Claude Haiku 4.5 có context window
+// 200k token (~800k ký tự), 8000 ký tự cũ (~1600 từ) quá thấp so với khả năng
+// thật, cắt mất nửa sau của những ngày chat nhiều (đã gặp thực tế: 65 tin nhắn
+// ~12.8k ký tự chỉ tóm tắt được 33/65 tin đầu, bỏ hẳn nửa cuối ngày). Nâng lên
+// mức vẫn rất an toàn so với context window nhưng đủ cho cả ngày chat sôi nổi.
+const CONVERSATION_CHAR_LIMIT = 60000;
+
 // ─── Lấy tin nhắn trong khoảng thời gian ─────────────────────────────────────
 export async function fetchMessages(groupId, since, until = null) {
   const result = await query(
@@ -101,7 +108,7 @@ export async function generateSummary(messages, type = 'daily') {
 
 😊 *Sentiment chung:* [tích cực/trung tính/cần chú ý]
 
-Cuộc trò chuyện:\n${conversation.slice(0, 8000)}`
+Cuộc trò chuyện:\n${conversation.slice(0, CONVERSATION_CHAR_LIMIT)}`
     : `Tổng hợp tuần này thành weekly report theo format:
 
 📈 *WEEKLY SUMMARY — Tuần ${getWeekNumber()}*
@@ -119,7 +126,7 @@ Cuộc trò chuyện:\n${conversation.slice(0, 8000)}`
 ⚠️ *Cần chú ý:*
 • [vấn đề cần Manager xem xét]
 
-Cuộc trò chuyện:\n${conversation.slice(0, 8000)}`; // Limit để không vượt context
+Cuộc trò chuyện:\n${conversation.slice(0, CONVERSATION_CHAR_LIMIT)}`;
 
   return generateText(prompt, { temperature: 0.4, maxTokens: 1200 }); // prompt yêu cầu "dưới 300 từ"
 }
