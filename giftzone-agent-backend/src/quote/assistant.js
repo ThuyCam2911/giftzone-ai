@@ -19,6 +19,9 @@ const PENDING_TTL_MINUTES = 15;
 const AWAITING_PRODUCT = '__AWAITING_PRODUCT__';
 
 const QUOTE_KEYWORDS = ['báo giá', 'giá bao nhiêu', 'giá sao', 'bao nhiêu tiền', 'cho giá', 'giá cả', 'giá thế nào'];
+// Sau khi 1 báo giá đã hoàn tất, Sales hay nhắn tiếp kiểu này để thêm sản phẩm/
+// quy cách khác vào CÙNG báo giá đó thay vì phải gõ lại "báo giá" từ đầu
+const ADD_KEYWORDS = ['bổ sung', 'thêm', 'cộng thêm'];
 
 // Tách câu thành từng đoạn — mỗi đoạn thường ứng với 1 sản phẩm khi Sales hỏi
 // nhiều sản phẩm cùng lúc (vd "báo giá 20 chai Confidor, 10 gói Antracol").
@@ -30,6 +33,11 @@ const SEGMENT_SPLIT_RE = /\n|,|;|\s+và\s+|\+/i;
 export function isQuoteRequest(text) {
   const q = (text ?? '').toLowerCase();
   return QUOTE_KEYWORDS.some(k => q.includes(k));
+}
+
+function isAddRequest(text) {
+  const q = (text ?? '').toLowerCase();
+  return ADD_KEYWORDS.some(k => q.includes(k));
 }
 
 function splitSegments(text) {
@@ -53,10 +61,6 @@ async function savePending(senderUid, groupId, confirmedItems, pendingProducts) 
        SET group_id = $2, confirmed_items = $3, pending_products = $4, updated_at = NOW()`,
     [senderUid, groupId, JSON.stringify(confirmedItems), JSON.stringify(pendingProducts)]
   );
-}
-
-async function clearPending(senderUid) {
-  await query(`DELETE FROM pending_quotes WHERE sender_uid = $1`, [senderUid]);
 }
 
 function askText(pendingProducts, priceRowsByProduct) {
@@ -194,7 +198,9 @@ export async function handleQuoteRequest(userQuery, { senderUid, groupId, sender
       };
     }
     if (pendingProducts.length === 0) {
-      await clearPending(senderUid);
+      // Giữ lại confirmed_items (pending_products rỗng) thay vì xoá hẳn — cho phép
+      // Sales "bổ sung thêm" sản phẩm khác vào cùng báo giá này trong ít phút tới
+      await savePending(senderUid, groupId, confirmed, []);
       const { caption, filePath } = await finalize(confirmed, senderName);
       return { handled: true, answer: caption, filePath };
     }
@@ -225,9 +231,41 @@ export async function handleQuoteRequest(userQuery, { senderUid, groupId, sender
       return { handled: true, answer: askText(stillPending, priceRowsByProduct) + skippedNote };
     }
 
-    await clearPending(senderUid);
+    await savePending(senderUid, groupId, confirmedItems, []);
     const { caption, filePath } = await finalize(confirmedItems, senderName);
     return { handled: true, answer: caption + skippedNote, filePath };
+  }
+
+  // 1c. Vừa hoàn tất 1 báo giá gần đây (còn confirmed_items, không còn gì đang
+  // hỏi dở) — Sales nhắn "bổ sung thêm ..." để thêm sản phẩm/quy cách khác vào
+  // CÙNG báo giá đó, không phải gõ lại "báo giá" từ đầu
+  if (pending && pending.confirmed_items.length > 0 && (isQuoteRequest(userQuery) || isAddRequest(userQuery))) {
+    const { confirmed: addedConfirmed, pending: addedPendingProducts } = await extractItemsFromText(userQuery);
+
+    // Không nhắc tên sản phẩm mới, nhưng báo giá trước chỉ có đúng 1 sản phẩm
+    // → hiểu là đang bổ sung thêm quy cách khác của CHÍNH sản phẩm đó
+    if (addedConfirmed.length === 0 && addedPendingProducts.length === 0) {
+      const lastProducts = [...new Set(pending.confirmed_items.map(i => i.product_name))];
+      if (lastProducts.length === 1) {
+        const priceRows = await getPriceRows(lastProducts[0]);
+        const found = extractQuantityAndUnit(userQuery, priceRows);
+        if (found) addedConfirmed.push({ product_name: lastProducts[0], unit: found.row.unit, unit_price: Number(found.row.unit_price), qty: found.qty });
+      }
+    }
+
+    if (addedConfirmed.length > 0 || addedPendingProducts.length > 0) {
+      const mergedItems = [...pending.confirmed_items, ...addedConfirmed];
+      if (addedPendingProducts.length > 0) {
+        const priceRowsByProduct = {};
+        for (const p of addedPendingProducts) priceRowsByProduct[p] = await getPriceRows(p);
+        await savePending(senderUid, groupId, mergedItems, addedPendingProducts);
+        return { handled: true, answer: askText(addedPendingProducts, priceRowsByProduct) };
+      }
+      await savePending(senderUid, groupId, mergedItems, []);
+      const { caption, filePath } = await finalize(mergedItems, senderName);
+      return { handled: true, answer: `${caption}\n(đã gộp thêm vào báo giá trước đó)`, filePath };
+    }
+    // Không nhận diện được gì để bổ sung — coi như không phải yêu cầu báo giá, để câu hỏi khác đi tiếp bình thường
   }
 
   // 2. Yêu cầu báo giá mới (1 hoặc nhiều sản phẩm)
@@ -246,6 +284,7 @@ export async function handleQuoteRequest(userQuery, { senderUid, groupId, sender
   }
 
   if (pendingProducts.length === 0) {
+    await savePending(senderUid, groupId, confirmed, []);
     const { caption, filePath } = await finalize(confirmed, senderName);
     return { handled: true, answer: caption, filePath };
   }
