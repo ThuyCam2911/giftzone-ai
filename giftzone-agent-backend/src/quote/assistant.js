@@ -76,9 +76,12 @@ function askText(pendingProducts, priceRowsByProduct) {
 
 async function finalize(confirmedItems, requesterName) {
   const { filePath, grandTotal } = await buildQuoteDocx({ items: confirmedItems, requesterName });
+  const distinctProducts = new Set(confirmedItems.map(i => i.product_name)).size;
   const label = confirmedItems.length === 1
     ? `${confirmedItems[0].qty} ${confirmedItems[0].unit} ${confirmedItems[0].product_name}`
-    : `${confirmedItems.length} sản phẩm`;
+    : distinctProducts === 1
+      ? `${confirmedItems[0].product_name} (${confirmedItems.length} quy cách)`
+      : `${confirmedItems.length} dòng, ${distinctProducts} sản phẩm`;
   return {
     caption: `📄 Báo giá ${label} — tổng ${Math.round(grandTotal).toLocaleString('vi-VN')}đ`,
     filePath,
@@ -113,40 +116,41 @@ async function extractItemsFromText(text) {
 }
 
 // Khớp câu trả lời của Sales với các sản phẩm đang chờ SL/quy cách. Nếu chỉ còn
-// 1 sản phẩm đang chờ thì không bắt buộc Sales phải nhắc lại tên sản phẩm.
+// 1 sản phẩm đang chờ thì không bắt buộc Sales phải nhắc lại tên sản phẩm, và
+// MỖI dòng khớp được sẽ tạo 1 dòng báo giá riêng cho sản phẩm đó (hỗ trợ báo
+// giá nhiều quy cách khác nhau của cùng 1 sản phẩm, vd "20 chai 500ml, 10 chai
+// 100ml" của cùng 1 SP — không chỉ lấy dòng đầu tiên rồi bỏ qua các dòng còn lại).
 async function resolvePendingReplies(text, pendingProducts) {
-  const resolved = {};
+  const newItems = [];
+  const resolvedProductNames = new Set();
   const priceRowsByProduct = {};
   for (const p of pendingProducts) priceRowsByProduct[p] = await getPriceRows(p);
 
   const segments = splitSegments(text);
+  const toItem = (p, found) => ({ product_name: p, unit: found.row.unit, unit_price: Number(found.row.unit_price), qty: found.qty });
 
   if (pendingProducts.length === 1) {
     const p = pendingProducts[0];
-    // Thử từng dòng riêng trước — nếu Sales lỡ gửi nhiều dòng (vd copy nhầm mẫu
-    // trả lời nhiều sản phẩm) mà chỉ có 1 sản phẩm đang chờ, KHÔNG được lấy số
-    // lượng và quy cách từ 2 dòng khác nhau ghép lại (bug đã gặp — "20 chai
-    // 500ml" + dòng khác "chai 100ml" bị ghép sai thành 20 x chai 100ml)
     for (const seg of segments) {
       const found = extractQuantityAndUnit(seg, priceRowsByProduct[p]);
-      if (found) { resolved[p] = found; break; }
+      if (found) { newItems.push(toItem(p, found)); resolvedProductNames.add(p); }
     }
-    if (!resolved[p]) {
+    if (newItems.length === 0) {
       const found = extractQuantityAndUnit(text, priceRowsByProduct[p]);
-      if (found) resolved[p] = found;
+      if (found) { newItems.push(toItem(p, found)); resolvedProductNames.add(p); }
     }
-    return { resolved, priceRowsByProduct };
+    return { newItems, resolvedProductNames, priceRowsByProduct };
   }
 
   // Bước 1: khớp theo tên sản phẩm được nhắc trong từng dòng (chính xác nhất,
-  // không phụ thuộc thứ tự)
+  // không phụ thuộc thứ tự) — mỗi sản phẩm tối đa 1 dòng báo giá ở bước này
   for (const seg of segments) {
     const segLower = seg.toLowerCase();
     for (const p of pendingProducts) {
-      if (resolved[p]) continue;
+      if (resolvedProductNames.has(p)) continue;
       if (!segLower.includes(p.split(' ')[0].toLowerCase())) continue;
       const found = extractQuantityAndUnit(seg, priceRowsByProduct[p]);
-      if (found) resolved[p] = found;
+      if (found) { newItems.push(toItem(p, found)); resolvedProductNames.add(p); }
     }
   }
 
@@ -156,13 +160,13 @@ async function resolvePendingReplies(text, pendingProducts) {
   // số dòng khớp đúng số sản phẩm đang chờ, tránh gán nhầm khi số dòng lệch.
   if (segments.length === pendingProducts.length) {
     pendingProducts.forEach((p, i) => {
-      if (resolved[p]) return;
+      if (resolvedProductNames.has(p)) return;
       const found = extractQuantityAndUnit(segments[i], priceRowsByProduct[p]);
-      if (found) resolved[p] = found;
+      if (found) { newItems.push(toItem(p, found)); resolvedProductNames.add(p); }
     });
   }
 
-  return { resolved, priceRowsByProduct };
+  return { newItems, resolvedProductNames, priceRowsByProduct };
 }
 
 /**
@@ -196,19 +200,16 @@ export async function handleQuoteRequest(userQuery, { senderUid, groupId, sender
 
   // 1b. Đang chờ Sales trả lời SL/quy cách cho 1 hoặc nhiều sản phẩm đã biết tên
   if (pending && pending.pending_products.length > 0) {
-    const { resolved, priceRowsByProduct } = await resolvePendingReplies(userQuery, pending.pending_products);
-    const newlyConfirmed = Object.entries(resolved).map(([product_name, { qty, row }]) => ({
-      product_name, unit: row.unit, unit_price: Number(row.unit_price), qty,
-    }));
+    const { newItems, resolvedProductNames, priceRowsByProduct } = await resolvePendingReplies(userQuery, pending.pending_products);
 
-    if (newlyConfirmed.length === 0) {
+    if (newItems.length === 0) {
       // Không parse được gì — nếu tin nhắn rõ ràng không liên quan báo giá thì bỏ qua, không chặn câu hỏi khác của Sales
       if (!/\d/.test(userQuery) && !isQuoteRequest(userQuery)) return { handled: false };
       return { handled: true, answer: askText(pending.pending_products, priceRowsByProduct) };
     }
 
-    const confirmedItems = [...pending.confirmed_items, ...newlyConfirmed];
-    const stillPending = pending.pending_products.filter(p => !resolved[p]);
+    const confirmedItems = [...pending.confirmed_items, ...newItems];
+    const stillPending = pending.pending_products.filter(p => !resolvedProductNames.has(p));
 
     if (stillPending.length > 0) {
       await savePending(senderUid, groupId, confirmedItems, stillPending);
