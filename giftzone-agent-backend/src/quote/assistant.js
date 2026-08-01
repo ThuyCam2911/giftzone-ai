@@ -1,40 +1,51 @@
 /**
- * Quote Assistant — Sales @mention hỏi "báo giá" → nếu thiếu số lượng/quy cách
- * thì hỏi lại, đủ thông tin thì tự tính tiền + xuất file .docx gửi thẳng cho
- * Sales (không gửi vào nhóm khách — xem eligibility ở responder.js).
+ * Quote Assistant — Sales @mention hỏi "báo giá" (1 hoặc NHIỀU sản phẩm cùng lúc)
+ * → sản phẩm nào thiếu số lượng/quy cách thì hỏi lại riêng, đủ thông tin thì tự
+ * tính tiền + xuất 1 file .docx gộp tất cả sản phẩm, gửi thẳng cho Sales.
  *
  * State "đang chờ trả lời số lượng" lưu ở bảng pending_quotes (không phải in-memory)
- * để không mất khi process restart, hết hạn sau PENDING_TTL_MS không trả lời.
+ * để không mất khi process restart, hết hạn sau PENDING_TTL_MINUTES không trả lời.
+ * confirmed_items: sản phẩm đã đủ SL/quy cách; pending_products: tên SP còn thiếu.
  */
 import { query } from '../utils/db.js';
 import { matchProduct, getPriceRows, extractQuantityAndUnit, buildQuoteDocx } from './generator.js';
-import { createLogger } from '../utils/logger.js';
 
-const log = createLogger('QuoteAssistant');
-const PENDING_TTL_MS = 15 * 60 * 1000;
+const PENDING_TTL_MINUTES = 15;
 
 const QUOTE_KEYWORDS = ['báo giá', 'giá bao nhiêu', 'giá sao', 'bao nhiêu tiền', 'cho giá', 'giá cả', 'giá thế nào'];
+
+// Tách câu thành từng đoạn — mỗi đoạn thường ứng với 1 sản phẩm khi Sales hỏi
+// nhiều sản phẩm cùng lúc (vd "báo giá 20 chai Confidor, 10 gói Antracol").
+// Dùng \s+và\s+ (yêu cầu khoảng trắng bao quanh) thay vì \bvà\b — JS regex \b
+// coi ký tự có dấu (à, ê, ơ...) không phải "word char" nên \b không nhận diện
+// đúng ranh giới sau "và", làm tách câu bị gộp nhầm hết vào 1 đoạn.
+const SEGMENT_SPLIT_RE = /\n|,|;|\s+và\s+|\+/i;
 
 export function isQuoteRequest(text) {
   const q = (text ?? '').toLowerCase();
   return QUOTE_KEYWORDS.some(k => q.includes(k));
 }
 
+function splitSegments(text) {
+  return (text ?? '').split(SEGMENT_SPLIT_RE).map(s => s.trim()).filter(Boolean);
+}
+
 async function getPending(senderUid) {
   const { rows } = await query(
-    `SELECT product_name, group_id FROM pending_quotes
-     WHERE sender_uid = $1 AND updated_at >= NOW() - INTERVAL '${PENDING_TTL_MS / 60000} minutes'`,
+    `SELECT group_id, confirmed_items, pending_products FROM pending_quotes
+     WHERE sender_uid = $1 AND updated_at >= NOW() - INTERVAL '${PENDING_TTL_MINUTES} minutes'`,
     [senderUid]
   );
   return rows[0] ?? null;
 }
 
-async function savePending(senderUid, groupId, productName) {
+async function savePending(senderUid, groupId, confirmedItems, pendingProducts) {
   await query(
-    `INSERT INTO pending_quotes (sender_uid, group_id, product_name, updated_at)
-     VALUES ($1, $2, $3, NOW())
-     ON CONFLICT (sender_uid) DO UPDATE SET group_id = $2, product_name = $3, updated_at = NOW()`,
-    [senderUid, groupId, productName]
+    `INSERT INTO pending_quotes (sender_uid, group_id, confirmed_items, pending_products, updated_at)
+     VALUES ($1, $2, $3, $4, NOW())
+     ON CONFLICT (sender_uid) DO UPDATE
+       SET group_id = $2, confirmed_items = $3, pending_products = $4, updated_at = NOW()`,
+    [senderUid, groupId, JSON.stringify(confirmedItems), JSON.stringify(pendingProducts)]
   );
 }
 
@@ -42,20 +53,83 @@ async function clearPending(senderUid) {
   await query(`DELETE FROM pending_quotes WHERE sender_uid = $1`, [senderUid]);
 }
 
-function askQuantityText(productName, priceRows) {
-  const options = priceRows.map(r => `- ${r.unit}: ${Math.round(r.unit_price).toLocaleString('vi-VN')}đ`).join('\n');
-  return `Bạn cần báo giá ${productName} — số lượng bao nhiêu và quy cách nào ạ?\n\n${options}\n\nTrả lời theo mẫu: "<số lượng> <quy cách>", vd "20 ${priceRows[0].unit}"`;
+function askText(pendingProducts, priceRowsByProduct) {
+  const blocks = pendingProducts.map(p => {
+    const options = priceRowsByProduct[p]
+      .map(r => `  - ${r.unit}: ${Math.round(r.unit_price).toLocaleString('vi-VN')}đ`)
+      .join('\n');
+    return `${p}:\n${options}`;
+  }).join('\n\n');
+
+  const example = pendingProducts.length > 1
+    ? `\n\nTrả lời mỗi dòng 1 sản phẩm, vd:\n20 ${priceRowsByProduct[pendingProducts[0]][0].unit} ${pendingProducts[0]}\n10 ${priceRowsByProduct[pendingProducts[1]][0].unit} ${pendingProducts[1]}`
+    : `\n\nTrả lời theo mẫu: "<số lượng> <quy cách>", vd "20 ${priceRowsByProduct[pendingProducts[0]][0].unit}"`;
+
+  return `Bạn cần báo giá số lượng bao nhiêu và quy cách nào ạ?\n\n${blocks}${example}`;
 }
 
-async function finalizeQuote(productName, row, qty, requesterName) {
-  const { filePath, grandTotal } = await buildQuoteDocx({
-    items: [{ product_name: productName, unit: row.unit, unit_price: Number(row.unit_price), qty }],
-    requesterName,
-  });
+async function finalize(confirmedItems, requesterName) {
+  const { filePath, grandTotal } = await buildQuoteDocx({ items: confirmedItems, requesterName });
+  const label = confirmedItems.length === 1
+    ? `${confirmedItems[0].qty} ${confirmedItems[0].unit} ${confirmedItems[0].product_name}`
+    : `${confirmedItems.length} sản phẩm`;
   return {
-    caption: `📄 Báo giá ${qty} ${row.unit} ${productName} — tổng ${Math.round(grandTotal).toLocaleString('vi-VN')}đ`,
+    caption: `📄 Báo giá ${label} — tổng ${Math.round(grandTotal).toLocaleString('vi-VN')}đ`,
     filePath,
   };
+}
+
+// Parse 1 câu (có thể nhiều đoạn) → sản phẩm đã đủ SL/quy cách (confirmed) và
+// sản phẩm chỉ mới nhắc tên, còn thiếu SL/quy cách (pending)
+async function extractItemsFromText(text) {
+  const confirmed = [];
+  const pending = [];
+  const seen = new Set();
+
+  for (const seg of splitSegments(text)) {
+    const matches = await matchProduct(seg);
+    if (matches.length !== 1) continue; // bỏ qua đoạn không rõ / nhắc >1 sản phẩm
+    const productName = matches[0];
+    if (seen.has(productName)) continue;
+    seen.add(productName);
+
+    const priceRows = await getPriceRows(productName);
+    if (priceRows.length === 0) continue; // chưa có giá cho SP này — bỏ qua, không báo giá được
+
+    const found = extractQuantityAndUnit(seg, priceRows);
+    if (found) {
+      confirmed.push({ product_name: productName, unit: found.row.unit, unit_price: Number(found.row.unit_price), qty: found.qty });
+    } else {
+      pending.push(productName);
+    }
+  }
+  return { confirmed, pending };
+}
+
+// Khớp câu trả lời của Sales với các sản phẩm đang chờ SL/quy cách. Nếu chỉ còn
+// 1 sản phẩm đang chờ thì không bắt buộc Sales phải nhắc lại tên sản phẩm.
+async function resolvePendingReplies(text, pendingProducts) {
+  const resolved = {};
+  const priceRowsByProduct = {};
+  for (const p of pendingProducts) priceRowsByProduct[p] = await getPriceRows(p);
+
+  if (pendingProducts.length === 1) {
+    const p = pendingProducts[0];
+    const found = extractQuantityAndUnit(text, priceRowsByProduct[p]);
+    if (found) resolved[p] = found;
+    return { resolved, priceRowsByProduct };
+  }
+
+  for (const seg of splitSegments(text)) {
+    const segLower = seg.toLowerCase();
+    for (const p of pendingProducts) {
+      if (resolved[p]) continue;
+      if (!segLower.includes(p.split(' ')[0].toLowerCase())) continue;
+      const found = extractQuantityAndUnit(seg, priceRowsByProduct[p]);
+      if (found) resolved[p] = found;
+    }
+  }
+  return { resolved, priceRowsByProduct };
 }
 
 /**
@@ -63,53 +137,51 @@ async function finalizeQuote(productName, row, qty, requesterName) {
  *   handled=false → không phải yêu cầu báo giá, caller fallback bình thường
  */
 export async function handleQuoteRequest(userQuery, { senderUid, groupId, senderName }) {
-  // 1. Đang chờ Sales trả lời số lượng/quy cách cho 1 sản phẩm cụ thể
+  // 1. Đang chờ Sales trả lời SL/quy cách cho 1 hoặc nhiều sản phẩm
   const pending = await getPending(senderUid);
-  if (pending) {
-    const priceRows = await getPriceRows(pending.product_name);
-    const found = extractQuantityAndUnit(userQuery, priceRows);
-    if (found) {
-      await clearPending(senderUid);
-      const { caption, filePath } = await finalizeQuote(pending.product_name, found.row, found.qty, senderName);
-      return { handled: true, answer: caption, filePath };
+  if (pending && pending.pending_products.length > 0) {
+    const { resolved, priceRowsByProduct } = await resolvePendingReplies(userQuery, pending.pending_products);
+    const newlyConfirmed = Object.entries(resolved).map(([product_name, { qty, row }]) => ({
+      product_name, unit: row.unit, unit_price: Number(row.unit_price), qty,
+    }));
+
+    if (newlyConfirmed.length === 0) {
+      // Không parse được gì — nếu tin nhắn rõ ràng không liên quan báo giá thì bỏ qua, không chặn câu hỏi khác của Sales
+      if (!/\d/.test(userQuery) && !isQuoteRequest(userQuery)) return { handled: false };
+      return { handled: true, answer: askText(pending.pending_products, priceRowsByProduct) };
     }
-    // Chưa parse được — nếu tin nhắn này không liên quan gì tới báo giá nữa thì bỏ qua pending (không chặn câu hỏi khác)
-    if (!isQuoteRequest(userQuery) && !/\d/.test(userQuery)) {
-      return { handled: false };
+
+    const confirmedItems = [...pending.confirmed_items, ...newlyConfirmed];
+    const stillPending = pending.pending_products.filter(p => !resolved[p]);
+
+    if (stillPending.length > 0) {
+      await savePending(senderUid, groupId, confirmedItems, stillPending);
+      return { handled: true, answer: askText(stillPending, priceRowsByProduct) };
     }
-    return { handled: true, answer: askQuantityText(pending.product_name, priceRows) };
+
+    await clearPending(senderUid);
+    const { caption, filePath } = await finalize(confirmedItems, senderName);
+    return { handled: true, answer: caption, filePath };
   }
 
-  // 2. Yêu cầu báo giá mới
+  // 2. Yêu cầu báo giá mới (1 hoặc nhiều sản phẩm)
   if (!isQuoteRequest(userQuery)) return { handled: false };
 
-  const products = await matchProduct(userQuery);
-  if (products.length === 0) {
+  const { confirmed, pending: pendingProducts } = await extractItemsFromText(userQuery);
+  if (confirmed.length === 0 && pendingProducts.length === 0) {
     return {
       handled: true,
       answer: 'Bạn cần báo giá sản phẩm nào ạ? (vd: Confidor 100SL, Anvil 5SC, Sofit 300EC...)',
     };
   }
-  if (products.length > 1) {
-    return {
-      handled: true,
-      answer: `Bạn muốn báo giá sản phẩm nào trong số này: ${products.join(', ')}?`,
-    };
-  }
 
-  const productName = products[0];
-  const priceRows = await getPriceRows(productName);
-  if (priceRows.length === 0) {
-    return { handled: true, answer: `Chưa có bảng giá cho ${productName}, bạn liên hệ Manager để cập nhật giúp mình nhé.` };
-  }
-
-  // Sales có thể hỏi đủ luôn trong 1 câu (vd "báo giá 20 chai 100ml Confidor 100SL")
-  const found = extractQuantityAndUnit(userQuery, priceRows);
-  if (found) {
-    const { caption, filePath } = await finalizeQuote(productName, found.row, found.qty, senderName);
+  if (pendingProducts.length === 0) {
+    const { caption, filePath } = await finalize(confirmed, senderName);
     return { handled: true, answer: caption, filePath };
   }
 
-  await savePending(senderUid, groupId, productName);
-  return { handled: true, answer: askQuantityText(productName, priceRows) };
+  const priceRowsByProduct = {};
+  for (const p of pendingProducts) priceRowsByProduct[p] = await getPriceRows(p);
+  await savePending(senderUid, groupId, confirmed, pendingProducts);
+  return { handled: true, answer: askText(pendingProducts, priceRowsByProduct) };
 }

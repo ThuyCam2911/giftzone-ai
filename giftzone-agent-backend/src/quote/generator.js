@@ -12,7 +12,7 @@ import os from 'os';
 import path from 'path';
 import {
   Document, Packer, Paragraph, Table, TableRow, TableCell,
-  TextRun, HeadingLevel, AlignmentType, WidthType, BorderStyle,
+  TextRun, HeadingLevel, AlignmentType, WidthType, TableLayoutType,
 } from 'docx';
 import { query } from '../utils/db.js';
 import { createLogger } from '../utils/logger.js';
@@ -68,27 +68,38 @@ export async function buildQuoteDocx({ items, requesterName }) {
   const grandTotal = rows.reduce((s, r) => s + r.line_total, 0);
   const today = new Date().toLocaleDateString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' });
 
-  const headerCell = text => new TableCell({
+  // Độ rộng cột cố định (đơn vị DXA, 1440 = 1 inch) — BẮT BUỘC phải khai báo cả
+  // ở Table.columnWidths lẫn từng TableCell.width, nếu không 1 số app xem docx
+  // (đặc biệt trên mobile) sẽ không tự autofit mà co mỗi cột về gần như 0, làm
+  // chữ bị vỡ dòng từng ký tự một (lỗi đã gặp khi thiếu width)
+  const COL_WIDTHS = [3200, 2000, 900, 1600, 1700]; // Sản phẩm, Quy cách, SL, Đơn giá, Thành tiền
+  const headerCell = (text, i) => new TableCell({
+    width: { size: COL_WIDTHS[i], type: WidthType.DXA },
     children: [new Paragraph({ children: [new TextRun({ text, bold: true })] })],
   });
-  const cell = (text, alignment) => new TableCell({ children: [new Paragraph({ text, alignment })] });
+  const cell = (text, i, alignment) => new TableCell({
+    width: { size: COL_WIDTHS[i], type: WidthType.DXA },
+    children: [new Paragraph({ text, alignment })],
+  });
 
   const table = new Table({
-    width: { size: 100, type: WidthType.PERCENTAGE },
+    width: { size: COL_WIDTHS.reduce((a, b) => a + b, 0), type: WidthType.DXA },
+    columnWidths: COL_WIDTHS,
+    layout: TableLayoutType.FIXED,
     rows: [
       new TableRow({
         children: [
-          headerCell('Sản phẩm'), headerCell('Quy cách'), headerCell('SL'),
-          headerCell('Đơn giá'), headerCell('Thành tiền'),
+          headerCell('Sản phẩm', 0), headerCell('Quy cách', 1), headerCell('SL', 2),
+          headerCell('Đơn giá', 3), headerCell('Thành tiền', 4),
         ],
       }),
       ...rows.map(r => new TableRow({
         children: [
-          cell(r.product_name),
-          cell(r.unit),
-          cell(String(r.qty), AlignmentType.CENTER),
-          cell(money(r.unit_price), AlignmentType.RIGHT),
-          cell(money(r.line_total), AlignmentType.RIGHT),
+          cell(r.product_name, 0),
+          cell(r.unit, 1),
+          cell(String(r.qty), 2, AlignmentType.CENTER),
+          cell(money(r.unit_price), 3, AlignmentType.RIGHT),
+          cell(money(r.line_total), 4, AlignmentType.RIGHT),
         ],
       })),
     ],

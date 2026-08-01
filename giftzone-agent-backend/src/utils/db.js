@@ -274,15 +274,20 @@ export async function initSchema() {
   `);
 
   // Trạng thái tạm khi Ops Assistant đã hỏi lại số lượng/quy cách cho 1 yêu cầu
-  // báo giá, chờ Sales trả lời — hết hạn sau 15 phút không tiếp tục (coi như huỷ)
+  // báo giá, chờ Sales trả lời — hết hạn sau 15 phút không tiếp tục (coi như huỷ).
+  // Hỗ trợ báo giá NHIỀU sản phẩm cùng lúc: confirmed_items = đã đủ SL/quy cách,
+  // pending_products = tên SP còn thiếu SL/quy cách, đang chờ Sales trả lời
   await query(`
     CREATE TABLE IF NOT EXISTS pending_quotes (
       sender_uid   TEXT PRIMARY KEY,
       group_id     TEXT NOT NULL,
-      product_name TEXT NOT NULL,
+      product_name TEXT,
       updated_at   TIMESTAMPTZ DEFAULT NOW()
     )
   `);
+  await query(`ALTER TABLE pending_quotes ALTER COLUMN product_name DROP NOT NULL`);
+  await query(`ALTER TABLE pending_quotes ADD COLUMN IF NOT EXISTS confirmed_items JSONB NOT NULL DEFAULT '[]'`);
+  await query(`ALTER TABLE pending_quotes ADD COLUMN IF NOT EXISTS pending_products JSONB NOT NULL DEFAULT '[]'`);
 
   log.info('Schema sẵn sàng ✓');
 }
