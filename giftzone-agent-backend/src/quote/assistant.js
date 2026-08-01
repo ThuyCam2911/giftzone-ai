@@ -12,6 +12,12 @@ import { matchProduct, getPriceRows, extractQuantityAndUnit, buildQuoteDocx } fr
 
 const PENDING_TTL_MINUTES = 15;
 
+// Sentinel: đã xác nhận là yêu cầu báo giá nhưng CHƯA biết sản phẩm nào (vd
+// Sales gõ "báo giá" rồi bấm Enter gửi ngay, tên sản phẩm gửi ở tin nhắn kế
+// tiếp) — lưu tạm để tin nhắn kế tiếp (dù không chứa từ khoá "báo giá") vẫn
+// được hiểu là tiếp nối, không bị rớt xuống RAG
+const AWAITING_PRODUCT = '__AWAITING_PRODUCT__';
+
 const QUOTE_KEYWORDS = ['báo giá', 'giá bao nhiêu', 'giá sao', 'bao nhiêu tiền', 'cho giá', 'giá cả', 'giá thế nào'];
 
 // Tách câu thành từng đoạn — mỗi đoạn thường ứng với 1 sản phẩm khi Sales hỏi
@@ -113,14 +119,24 @@ async function resolvePendingReplies(text, pendingProducts) {
   const priceRowsByProduct = {};
   for (const p of pendingProducts) priceRowsByProduct[p] = await getPriceRows(p);
 
+  const segments = splitSegments(text);
+
   if (pendingProducts.length === 1) {
     const p = pendingProducts[0];
-    const found = extractQuantityAndUnit(text, priceRowsByProduct[p]);
-    if (found) resolved[p] = found;
+    // Thử từng dòng riêng trước — nếu Sales lỡ gửi nhiều dòng (vd copy nhầm mẫu
+    // trả lời nhiều sản phẩm) mà chỉ có 1 sản phẩm đang chờ, KHÔNG được lấy số
+    // lượng và quy cách từ 2 dòng khác nhau ghép lại (bug đã gặp — "20 chai
+    // 500ml" + dòng khác "chai 100ml" bị ghép sai thành 20 x chai 100ml)
+    for (const seg of segments) {
+      const found = extractQuantityAndUnit(seg, priceRowsByProduct[p]);
+      if (found) { resolved[p] = found; break; }
+    }
+    if (!resolved[p]) {
+      const found = extractQuantityAndUnit(text, priceRowsByProduct[p]);
+      if (found) resolved[p] = found;
+    }
     return { resolved, priceRowsByProduct };
   }
-
-  const segments = splitSegments(text);
 
   // Bước 1: khớp theo tên sản phẩm được nhắc trong từng dòng (chính xác nhất,
   // không phụ thuộc thứ tự)
@@ -154,8 +170,31 @@ async function resolvePendingReplies(text, pendingProducts) {
  *   handled=false → không phải yêu cầu báo giá, caller fallback bình thường
  */
 export async function handleQuoteRequest(userQuery, { senderUid, groupId, senderName }) {
-  // 1. Đang chờ Sales trả lời SL/quy cách cho 1 hoặc nhiều sản phẩm
   const pending = await getPending(senderUid);
+
+  // 1a. Đã hỏi "báo giá" trước đó nhưng chưa biết sản phẩm nào — tin nhắn này
+  // (dù không chứa từ khoá "báo giá") được hiểu là tên sản phẩm Sales bổ sung
+  if (pending && pending.pending_products.length === 1 && pending.pending_products[0] === AWAITING_PRODUCT) {
+    const { confirmed, pending: pendingProducts } = await extractItemsFromText(userQuery);
+    if (confirmed.length === 0 && pendingProducts.length === 0) {
+      // Vẫn chưa nhận diện được sản phẩm — giữ tiếp trạng thái chờ, hỏi lại
+      return {
+        handled: true,
+        answer: 'Bạn cần báo giá sản phẩm nào ạ? (vd: Confidor 100SL, Anvil 5SC, Sofit 300EC...)',
+      };
+    }
+    if (pendingProducts.length === 0) {
+      await clearPending(senderUid);
+      const { caption, filePath } = await finalize(confirmed, senderName);
+      return { handled: true, answer: caption, filePath };
+    }
+    const priceRowsByProduct = {};
+    for (const p of pendingProducts) priceRowsByProduct[p] = await getPriceRows(p);
+    await savePending(senderUid, groupId, confirmed, pendingProducts);
+    return { handled: true, answer: askText(pendingProducts, priceRowsByProduct) };
+  }
+
+  // 1b. Đang chờ Sales trả lời SL/quy cách cho 1 hoặc nhiều sản phẩm đã biết tên
   if (pending && pending.pending_products.length > 0) {
     const { resolved, priceRowsByProduct } = await resolvePendingReplies(userQuery, pending.pending_products);
     const newlyConfirmed = Object.entries(resolved).map(([product_name, { qty, row }]) => ({
@@ -186,6 +225,10 @@ export async function handleQuoteRequest(userQuery, { senderUid, groupId, sender
 
   const { confirmed, pending: pendingProducts } = await extractItemsFromText(userQuery);
   if (confirmed.length === 0 && pendingProducts.length === 0) {
+    // Chưa nhận diện được sản phẩm nào — lưu trạng thái "đang chờ tên sản phẩm"
+    // để tin nhắn kế tiếp (vd chỉ gõ "Anvil 5SC") vẫn được hiểu là tiếp nối,
+    // dù bản thân nó không chứa từ khoá "báo giá"
+    await savePending(senderUid, groupId, [], [AWAITING_PRODUCT]);
     return {
       handled: true,
       answer: 'Bạn cần báo giá sản phẩm nào ạ? (vd: Confidor 100SL, Anvil 5SC, Sofit 300EC...)',
