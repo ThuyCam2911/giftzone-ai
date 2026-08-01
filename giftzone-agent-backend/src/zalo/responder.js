@@ -90,8 +90,11 @@ export class MentionResponder {
       await this._loadInternalGroups();
       const inInternalGroup = !isDirect && this._internalGroups.has(groupId);
       const opsEligible = inInternalGroup || (isDirect && isGzMember);
-      // Nhóm khách (vd giftzone-deal-monitor): nhân viên GZ @mention hỏi "tóm tắt" vẫn
-      // được trả lời, nhưng CHỈ intent summary — không lộ issues/KPI nội bộ vào nhóm khách
+      // Nhóm khách (vd giftzone-deal-monitor): nhân viên GZ @mention hỏi "tóm tắt"/"báo giá"
+      // vẫn được trả lời (đã xác định người hỏi là nội bộ qua gz_members), nhưng KHÔNG
+      // cho intent "ops" (issues/KPI) vì có thể lộ dữ liệu nhạy cảm vào nhóm có khách hàng.
+      // ⚠️ Báo giá vẫn gửi file thẳng vào group này nếu hỏi ở đây — dùng DM với bot nếu
+      // không muốn khách trong group thấy được file báo giá.
       const summaryOnlyEligible = !isDirect && !inInternalGroup && isGzMember;
       if (opsEligible || summaryOnlyEligible) {
         const ops = await handleInternalQuery(userQuery, {

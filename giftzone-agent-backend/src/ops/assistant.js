@@ -310,8 +310,9 @@ async function summarizeOnDemand(groupName, days, currentGroupId) {
  * @param {string} [opts.currentGroupId] nhóm hiện tại (dùng làm mặc định khi
  *   người hỏi không nêu tên nhóm khác — vd @mention "tóm tắt" ngay trong nhóm đó)
  * @param {boolean} [opts.summaryOnly] true khi caller chỉ cho phép intent
- *   "summary" (vd @mention trong nhóm khách — không được lộ issues/KPI nội bộ,
- *   cũng không cho báo giá vì file phải gửi riêng cho Sales, không lộ vào nhóm khách)
+ *   "summary" hoặc "quote" (vd @mention trong nhóm khách bởi gz_members —
+ *   không được lộ issues/KPI nội bộ, nhưng tóm tắt/báo giá thì cho phép vì
+ *   người hỏi đã xác định là nhân viên GiftZone, xem eligibility ở responder.js)
  * @param {string} [opts.senderUid] người hỏi — dùng cho luồng báo giá nhiều lượt
  * @param {string} [opts.senderName] tên người hỏi — in vào file báo giá
  * @returns {Promise<{handled: boolean, answer?: string, intent?: string, filePath?: string}>}
@@ -321,7 +322,7 @@ async function summarizeOnDemand(groupName, days, currentGroupId) {
 export async function handleInternalQuery(userQuery, { currentGroupId = null, summaryOnly = false, senderUid = null, senderName = null } = {}) {
   // Báo giá — check trước classifyIntent vì câu trả lời tiếp theo của Sales
   // (vd "20 chai 100ml") không chứa từ khoá "báo giá" nên heuristic sẽ không nhận ra
-  if (!summaryOnly && senderUid) {
+  if (senderUid) {
     const quote = await handleQuoteRequest(userQuery, { senderUid, groupId: currentGroupId, senderName });
     if (quote.handled) {
       return { handled: true, answer: quote.answer, intent: 'quote', filePath: quote.filePath };
