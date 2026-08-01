@@ -129,17 +129,22 @@ async function resolvePendingReplies(text, pendingProducts) {
   const segments = splitSegments(text);
   const toItem = (p, found) => ({ product_name: p, unit: found.row.unit, unit_price: Number(found.row.unit_price), qty: found.qty });
 
+  // Dòng có số nhưng cuối cùng không khớp được quy cách nào — báo lại rõ ràng
+  // cho Sales biết, thay vì âm thầm bỏ qua khiến tưởng nhầm là bug/thiếu sản phẩm
+  const usedSegments = new Set();
+
   if (pendingProducts.length === 1) {
     const p = pendingProducts[0];
     for (const seg of segments) {
       const found = extractQuantityAndUnit(seg, priceRowsByProduct[p]);
-      if (found) { newItems.push(toItem(p, found)); resolvedProductNames.add(p); }
+      if (found) { newItems.push(toItem(p, found)); resolvedProductNames.add(p); usedSegments.add(seg); }
     }
     if (newItems.length === 0) {
       const found = extractQuantityAndUnit(text, priceRowsByProduct[p]);
       if (found) { newItems.push(toItem(p, found)); resolvedProductNames.add(p); }
     }
-    return { newItems, resolvedProductNames, priceRowsByProduct };
+    const skipped = newItems.length > 0 ? segments.filter(s => !usedSegments.has(s) && /\d/.test(s)) : [];
+    return { newItems, resolvedProductNames, priceRowsByProduct, skipped };
   }
 
   // Bước 1: khớp theo tên sản phẩm được nhắc trong từng dòng (chính xác nhất,
@@ -150,7 +155,7 @@ async function resolvePendingReplies(text, pendingProducts) {
       if (resolvedProductNames.has(p)) continue;
       if (!segLower.includes(p.split(' ')[0].toLowerCase())) continue;
       const found = extractQuantityAndUnit(seg, priceRowsByProduct[p]);
-      if (found) { newItems.push(toItem(p, found)); resolvedProductNames.add(p); }
+      if (found) { newItems.push(toItem(p, found)); resolvedProductNames.add(p); usedSegments.add(seg); }
     }
   }
 
@@ -162,11 +167,12 @@ async function resolvePendingReplies(text, pendingProducts) {
     pendingProducts.forEach((p, i) => {
       if (resolvedProductNames.has(p)) return;
       const found = extractQuantityAndUnit(segments[i], priceRowsByProduct[p]);
-      if (found) { newItems.push(toItem(p, found)); resolvedProductNames.add(p); }
+      if (found) { newItems.push(toItem(p, found)); resolvedProductNames.add(p); usedSegments.add(segments[i]); }
     });
   }
 
-  return { newItems, resolvedProductNames, priceRowsByProduct };
+  const skipped = segments.filter(s => !usedSegments.has(s) && /\d/.test(s));
+  return { newItems, resolvedProductNames, priceRowsByProduct, skipped };
 }
 
 /**
@@ -200,7 +206,10 @@ export async function handleQuoteRequest(userQuery, { senderUid, groupId, sender
 
   // 1b. Đang chờ Sales trả lời SL/quy cách cho 1 hoặc nhiều sản phẩm đã biết tên
   if (pending && pending.pending_products.length > 0) {
-    const { newItems, resolvedProductNames, priceRowsByProduct } = await resolvePendingReplies(userQuery, pending.pending_products);
+    const { newItems, resolvedProductNames, priceRowsByProduct, skipped } = await resolvePendingReplies(userQuery, pending.pending_products);
+    const skippedNote = skipped?.length
+      ? `\n\n⚠️ Không nhận diện được quy cách cho dòng: ${skipped.map(s => `"${s}"`).join(', ')} — nếu dòng này là sản phẩm khác, ghi rõ tên sản phẩm kèm theo.`
+      : '';
 
     if (newItems.length === 0) {
       // Không parse được gì — nếu tin nhắn rõ ràng không liên quan báo giá thì bỏ qua, không chặn câu hỏi khác của Sales
@@ -213,12 +222,12 @@ export async function handleQuoteRequest(userQuery, { senderUid, groupId, sender
 
     if (stillPending.length > 0) {
       await savePending(senderUid, groupId, confirmedItems, stillPending);
-      return { handled: true, answer: askText(stillPending, priceRowsByProduct) };
+      return { handled: true, answer: askText(stillPending, priceRowsByProduct) + skippedNote };
     }
 
     await clearPending(senderUid);
     const { caption, filePath } = await finalize(confirmedItems, senderName);
-    return { handled: true, answer: caption, filePath };
+    return { handled: true, answer: caption + skippedNote, filePath };
   }
 
   // 2. Yêu cầu báo giá mới (1 hoặc nhiều sản phẩm)
