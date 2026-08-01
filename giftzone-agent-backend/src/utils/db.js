@@ -259,5 +259,30 @@ export async function initSchema() {
     )
   `);
 
+  // Bảng giá sản phẩm (Nông Dược, demo) — 1 dòng/quy cách đóng gói, dùng để
+  // Ops Assistant tính tiền + xuất file báo giá, xem quote/generator.js
+  await query(`
+    CREATE TABLE IF NOT EXISTS product_prices (
+      id           SERIAL PRIMARY KEY,
+      product_name TEXT NOT NULL,
+      unit         TEXT NOT NULL,
+      unit_price   NUMERIC NOT NULL,
+      active       BOOLEAN NOT NULL DEFAULT true,
+      updated_at   TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE (product_name, unit)
+    )
+  `);
+
+  // Trạng thái tạm khi Ops Assistant đã hỏi lại số lượng/quy cách cho 1 yêu cầu
+  // báo giá, chờ Sales trả lời — hết hạn sau 15 phút không tiếp tục (coi như huỷ)
+  await query(`
+    CREATE TABLE IF NOT EXISTS pending_quotes (
+      sender_uid   TEXT PRIMARY KEY,
+      group_id     TEXT NOT NULL,
+      product_name TEXT NOT NULL,
+      updated_at   TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+
   log.info('Schema sẵn sàng ✓');
 }

@@ -7,6 +7,7 @@
 import { generateText } from '../utils/claude.js';
 import { query } from '../utils/db.js';
 import { buildTodaySummary, getOrBuildDailySummary, todayVN } from '../summary/engine.js';
+import { handleQuoteRequest } from '../quote/assistant.js';
 import { createLogger } from '../utils/logger.js';
 
 const log = createLogger('OpsAssistant');
@@ -309,11 +310,24 @@ async function summarizeOnDemand(groupName, days, currentGroupId) {
  * @param {string} [opts.currentGroupId] nhóm hiện tại (dùng làm mặc định khi
  *   người hỏi không nêu tên nhóm khác — vd @mention "tóm tắt" ngay trong nhóm đó)
  * @param {boolean} [opts.summaryOnly] true khi caller chỉ cho phép intent
- *   "summary" (vd @mention trong nhóm khách — không được lộ issues/KPI nội bộ)
- * @returns {Promise<{handled: boolean, answer?: string, intent?: string}>}
+ *   "summary" (vd @mention trong nhóm khách — không được lộ issues/KPI nội bộ,
+ *   cũng không cho báo giá vì file phải gửi riêng cho Sales, không lộ vào nhóm khách)
+ * @param {string} [opts.senderUid] người hỏi — dùng cho luồng báo giá nhiều lượt
+ * @param {string} [opts.senderName] tên người hỏi — in vào file báo giá
+ * @returns {Promise<{handled: boolean, answer?: string, intent?: string, filePath?: string}>}
  *   handled=false → caller fallback về RAG docs (hoặc im lặng nếu RAG tắt)
+ *   filePath (nếu có) → caller gửi kèm file này rồi xoá file tạm
  */
-export async function handleInternalQuery(userQuery, { currentGroupId = null, summaryOnly = false } = {}) {
+export async function handleInternalQuery(userQuery, { currentGroupId = null, summaryOnly = false, senderUid = null, senderName = null } = {}) {
+  // Báo giá — check trước classifyIntent vì câu trả lời tiếp theo của Sales
+  // (vd "20 chai 100ml") không chứa từ khoá "báo giá" nên heuristic sẽ không nhận ra
+  if (!summaryOnly && senderUid) {
+    const quote = await handleQuoteRequest(userQuery, { senderUid, groupId: currentGroupId, senderName });
+    if (quote.handled) {
+      return { handled: true, answer: quote.answer, intent: 'quote', filePath: quote.filePath };
+    }
+  }
+
   const { intent, group_name, days } = await classifyIntent(userQuery);
   log.info(`Intent: ${intent}${group_name ? ` — nhóm "${group_name}"` : ''}`);
 

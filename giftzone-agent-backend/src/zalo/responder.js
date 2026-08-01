@@ -6,6 +6,7 @@
  *   không nên trả lời tài liệu công ty cho khách, nhưng vẫn cần trả lời Ops
  *   nếu account đó cũng là thành viên 1 nhóm internal nào đó)
  */
+import fs from 'fs';
 import { MessageType } from 'zca-js';
 import { answer } from '../rag/retriever.js';
 import { handleInternalQuery } from '../ops/assistant.js';
@@ -96,9 +97,12 @@ export class MentionResponder {
         const ops = await handleInternalQuery(userQuery, {
           currentGroupId: groupId,
           summaryOnly: summaryOnlyEligible,
+          senderUid,
+          senderName,
         });
         if (ops.handled) {
           await this._send(groupId, ops.answer, isDirect);
+          if (ops.filePath) await this._sendFile(groupId, ops.filePath, isDirect);
           await this._logInteraction({
             groupId, senderUid,
             query: userQuery,
@@ -176,6 +180,19 @@ export class MentionResponder {
       await this.api.sendMessage({ msg: text }, threadId, type);
     } catch (err) {
       log.error('Gửi tin thất bại', err.message);
+    }
+  }
+
+  // Gửi file đính kèm (vd file báo giá .docx) — file tạm ở os.tmpdir(), xoá ngay
+  // sau khi gửi xong (thành công hay lỗi đều xoá, tránh rác tích luỹ trên container)
+  async _sendFile(threadId, filePath, isDirect = false) {
+    try {
+      const type = isDirect ? MessageType.DirectMessage : MessageType.GroupMessage;
+      await this.api.sendMessage({ msg: '', attachments: [filePath] }, threadId, type);
+    } catch (err) {
+      log.error('Gửi file thất bại', err.message);
+    } finally {
+      fs.unlink(filePath, () => {});
     }
   }
 
