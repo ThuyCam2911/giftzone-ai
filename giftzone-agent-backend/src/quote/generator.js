@@ -46,10 +46,23 @@ export async function matchProduct(text) {
 }
 
 // Lấy phần "kích cỡ" trong 1 chuỗi quy cách, vd "chai 500ml" → "500ml",
-// "can 1 lít" → "1lít" (bỏ khoảng trắng để so khớp khoan dung hơn)
-function sizeToken(unit) {
-  const m = (unit ?? '').match(/[\d.,]+\s*(ml|lít|kg|g)\b/i);
-  return m ? m[0].replace(/\s+/g, '').toLowerCase() : null;
+// "can 1 lít" → "1lít" (bỏ khoảng trắng để so khớp khoan dung hơn). KHÔNG nhận
+// "l" viết tắt đứng một mình — dễ khớp nhầm số lượng đứng sau làm 1 phần quy
+// cách khi ghép chuỗi không dấu cách (vd "1l 500 chai" → dễ hiểu nhầm thành
+// "1 lít" thay vì đúng ý "số lượng 500")
+function sizeToken(text) {
+  const m = (text ?? '').match(/([\d.,]+)\s*(ml|lít|lit|kg|g)\b/i);
+  if (!m) return null;
+  const unit = m[2].toLowerCase() === 'lit' ? 'lít' : m[2].toLowerCase();
+  return `${m[1].replace(/[.,]/g, '')}${unit}`;
+}
+
+// Tìm cụm "kích cỡ" Sales gõ trong câu (dù có khớp được sản phẩm nào hay
+// không) — dùng để báo lại rõ ràng khi quy cách đó không tồn tại, thay vì im
+// lặng hỏi lại y hệt khiến tưởng bot không nhận được tin nhắn
+export function extractRawSizeMention(text) {
+  const m = (text ?? '').match(/[\d.,]+\s*(ml|lít|lit|kg|g)\b/i);
+  return m ? m[0].trim() : null;
 }
 
 // Khớp số lượng + đúng quy cách (unit) trong 1 câu trả lời của Sales, dựa vào

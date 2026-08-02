@@ -8,7 +8,7 @@
  * confirmed_items: sản phẩm đã đủ SL/quy cách; pending_products: tên SP còn thiếu.
  */
 import { query } from '../utils/db.js';
-import { matchProduct, getPriceRows, extractQuantityAndUnit, buildQuoteDocx } from './generator.js';
+import { matchProduct, getPriceRows, extractQuantityAndUnit, extractRawSizeMention, buildQuoteDocx } from './generator.js';
 
 const PENDING_TTL_MINUTES = 15;
 
@@ -220,7 +220,11 @@ export async function handleQuoteRequest(userQuery, { senderUid, groupId, sender
     if (newItems.length === 0) {
       // Không parse được gì — nếu tin nhắn rõ ràng không liên quan báo giá thì bỏ qua, không chặn câu hỏi khác của Sales
       if (!/\d/.test(userQuery) && !isQuoteRequest(userQuery)) return { handled: false };
-      return { handled: true, answer: askText(pending.pending_products, priceRowsByProduct) };
+      // Có gõ số/quy cách nhưng không khớp — nói rõ vì sao thay vì lặp lại y hệt
+      // câu hỏi trước (trông như bot không nhận được tin nhắn)
+      const attempted = extractRawSizeMention(userQuery);
+      const note = attempted ? `⚠️ "${attempted}" không phải quy cách hợp lệ.\n\n` : '';
+      return { handled: true, answer: note + askText(pending.pending_products, priceRowsByProduct) };
     }
 
     const confirmedItems = [...pending.confirmed_items, ...newItems];
