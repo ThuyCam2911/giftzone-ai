@@ -74,6 +74,45 @@ async function markAnalyzed(groupId) {
   );
 }
 
+const SLOW_REPLY_THRESHOLD_HOURS = 24;
+
+// ─── Phát hiện slow_reply BẰNG CODE (không nhờ LLM tự tính) ──────────────────
+// Trước đây "> 24 giờ" hoàn toàn dựa vào Claude tự đọc timestamp dạng text rồi
+// tự làm phép trừ thời gian trong đầu — thực tế đã gặp case CS trả lời trong
+// 1-2h nhưng AI báo 28h (LLM tính sai/ghép nhầm cặp tin nhắn khi context dài,
+// nhiều luồng hội thoại xen kẽ). Giờ tính chính xác 100% bằng phép trừ
+// Date thật, khớp mỗi tin khách với đúng reply GZ NGAY SAU đó (không lấy tin
+// GZ gần nhất bất kỳ, tránh ghép nhầm 1 câu hỏi cũ đã được trả lời từ lâu).
+function detectSlowReply(messages, gzMap) {
+  let lastCustomerMsg = null;
+  let worst = null;
+
+  for (const m of messages) {
+    const isGz = gzMap.has(m.sender_uid);
+    if (!isGz) {
+      lastCustomerMsg = m; // khách nhắn — bắt đầu (hoặc reset) đồng hồ chờ
+      continue;
+    }
+    if (!lastCustomerMsg) continue; // GZ tự nhắn tiếp, không có khách đang chờ
+
+    const gapHours = (new Date(m.msg_ts) - new Date(lastCustomerMsg.msg_ts)) / 3600000;
+    if (gapHours > SLOW_REPLY_THRESHOLD_HOURS && (!worst || gapHours > worst.gapHours)) {
+      worst = { gapHours, customerMsg: lastCustomerMsg, staffMsg: m };
+    }
+    lastCustomerMsg = null; // GZ đã reply — "đóng" lượt chờ này, không tính lại cho tin GZ sau
+  }
+
+  if (!worst) return null;
+  const h = Math.floor(worst.gapHours);
+  return {
+    issue_type: 'slow_reply',
+    severity: worst.gapHours > 48 ? 'high' : 'medium',
+    title: `Phản hồi chậm — sau ${h} giờ mới trả lời khách`,
+    description: `${worst.staffMsg.sender_name} trả lời sau ${h} giờ kể từ tin nhắn của khách (tính chính xác bằng timestamp, không phải AI ước lượng).`,
+    evidence: `[KH] ${worst.customerMsg.sender_name}: ${String(worst.customerMsg.content).slice(0, 100)} → [${worst.staffMsg.sender_name}] ${String(worst.staffMsg.content).slice(0, 100)}`,
+  };
+}
+
 // ─── Gọi OpenRouter để phát hiện issues ──────────────────────────────────────
 async function detectIssues(groupId, messages) {
   if (messages.length < 5) return [];
@@ -84,6 +123,10 @@ async function detectIssues(groupId, messages) {
   const gzRows = await query(`SELECT sender_uid, role FROM gz_members`);
   const gzMap = new Map(gzRows.rows.map(r => [r.sender_uid, r.role ?? 'sales']));
   const hasGzConfig = gzMap.size > 0;
+
+  // slow_reply giờ tính bằng code (chính xác), không đưa vào danh sách LLM tự
+  // detect nữa — chỉ tính được khi biết ai là GZ (cần gz_members)
+  const slowReplyIssue = hasGzConfig ? detectSlowReply(messages, gzMap) : null;
 
   const ROLE_LABEL = { sales: 'GZ-Sales', cs: 'GZ-CS', manager: 'GZ-Manager', technical: 'GZ-Tech' };
 
@@ -110,7 +153,7 @@ Phân loại người tham gia:
 Quy tắc bổ sung:
 - Chỉ report no_reply hoặc dropped_conversation khi [KH] nhắn và GZ chưa có reply
 - Nếu các tin nhắn cuối đều là [KH] nói chuyện với nhau (không có câu hỏi hướng đến GZ) → KHÔNG flag no_reply hay dropped_conversation
-- slow_reply, rude_behavior, broken_promise chỉ áp dụng cho nhân viên GZ
+- rude_behavior, broken_promise chỉ áp dụng cho nhân viên GZ
 ` : '';
 
   const prompt = `Bạn là AI giám sát chất lượng đội ngũ sales (theo mô hình WeCom). Phân tích hội thoại dưới đây và phát hiện CÁC VẤN ĐỀ đang xảy ra.
@@ -119,7 +162,6 @@ Timestamp hiện tại: ${now}
 ${roleRules}
 Issue types được phép dùng:
 - no_reply: khách đã hỏi nhưng sales chưa reply (dựa vào thứ tự tin nhắn cuối)
-- slow_reply: khoảng cách reply của sales > 24 giờ (tính từ timestamp)
 - rude_behavior: sales dùng ngôn ngữ cọc cằn, thiếu tôn trọng, lạnh lùng bất thường
 - customer_complaint: khách bày tỏ bất mãn, phàn nàn về sản phẩm hoặc thái độ
 - broken_promise: sales nói "sẽ gửi", "để kiểm tra", "sẽ liên hệ lại" nhưng không có tin tiếp theo
@@ -151,14 +193,20 @@ ${conversation.slice(0, 6000)}
 
   const text = await callClaude(prompt);
 
+  let issues;
   try {
     const json = text.replace(/```json?\n?/g, '').replace(/```/g, '').trim();
-    const issues = JSON.parse(json);
-    return Array.isArray(issues) ? issues : [];
+    const parsed = JSON.parse(json);
+    issues = Array.isArray(parsed) ? parsed : [];
   } catch {
     log.warn(`Parse JSON thất bại cho group ${groupId}:`, text.slice(0, 200));
-    return [];
+    issues = [];
   }
+
+  // slow_reply tính bằng code, không phải LLM — nếu Claude lỡ tự report thêm
+  // (dù đã bỏ khỏi danh sách issue types) thì bỏ qua bản của LLM, dùng bản tính đúng
+  const withoutLlmSlowReply = issues.filter(i => i.issue_type !== 'slow_reply');
+  return slowReplyIssue ? [...withoutLlmSlowReply, slowReplyIssue] : withoutLlmSlowReply;
 }
 
 // ─── Upsert issue ─────────────────────────────────────────────────────────────
