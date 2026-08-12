@@ -20,7 +20,8 @@ async function buildAlertMessage() {
   const [criticalIssues, aiStats, knowledgeGaps] = await Promise.all([
     // Issues critical/high/medium đang open
     query(
-      `SELECT s.issue_type, s.severity, s.title, gn.name AS group_name
+      `SELECT s.issue_type, s.severity, s.title, gn.name AS group_name,
+              GREATEST(0, EXTRACT(DAY FROM NOW() - s.detected_at))::int AS days_open
        FROM sales_issues s
        LEFT JOIN group_names gn ON gn.group_id = s.group_id
        WHERE s.status = 'open' AND s.severity IN ('critical', 'high', 'medium')
@@ -61,7 +62,8 @@ async function buildAlertMessage() {
     lines.push(`\n⚠️ *Issues đang mở (${criticalIssues.rows.length}):*`);
     for (const r of criticalIssues.rows) {
       const sev = r.severity === 'critical' ? '🔴' : r.severity === 'high' ? '🟠' : '🟡';
-      lines.push(`${sev} ${r.group_name}: ${r.title}`);
+      const ageLabel = r.days_open > 0 ? ` (mở ${r.days_open} ngày)` : ' (mở hôm nay)';
+      lines.push(`${sev} ${r.group_name}: ${r.title}${ageLabel}`);
     }
     lines.push(`\n→ CS Lead vui lòng kiểm tra và điều chỉnh.`);
   } else {
