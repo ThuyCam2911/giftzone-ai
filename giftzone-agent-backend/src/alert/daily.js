@@ -17,7 +17,7 @@ async function buildAlertMessage() {
     day: '2-digit', month: '2-digit', year: 'numeric',
   });
 
-  const [criticalIssues, inactiveGroups, aiStats, knowledgeGaps] = await Promise.all([
+  const [criticalIssues, aiStats, knowledgeGaps] = await Promise.all([
     // Issues critical/high/medium đang open
     query(
       `SELECT s.issue_type, s.severity, s.title, gn.name AS group_name
@@ -26,18 +26,6 @@ async function buildAlertMessage() {
        WHERE s.status = 'open' AND s.severity IN ('critical', 'high', 'medium')
        ORDER BY CASE s.severity WHEN 'critical' THEN 1 WHEN 'high' THEN 2 ELSE 3 END, s.detected_at DESC
        LIMIT 8`,
-    ),
-    // Nhóm im lặng > 3 ngày (chỉ nhóm có tên, bỏ DM 1:1 và nhóm nội bộ)
-    query(
-      `SELECT gn.name, MAX(m.msg_ts) AS last_msg
-       FROM messages m
-       INNER JOIN group_names gn ON gn.group_id = m.group_id
-       WHERE gn.group_type NOT IN ('internal', 'direct')
-         AND gn.name IS NOT NULL
-       GROUP BY gn.name
-       HAVING MAX(m.msg_ts) < NOW() - INTERVAL '3 days'
-       ORDER BY MAX(m.msg_ts) ASC
-       LIMIT 5`,
     ),
     // Thống kê AI hôm qua
     query(
@@ -75,17 +63,9 @@ async function buildAlertMessage() {
       const sev = r.severity === 'critical' ? '🔴' : r.severity === 'high' ? '🟠' : '🟡';
       lines.push(`${sev} ${r.group_name}: ${r.title}`);
     }
+    lines.push(`\n→ CS Lead vui lòng kiểm tra và điều chỉnh.`);
   } else {
-    lines.push(`\n✅ Không có issues đang mở`);
-  }
-
-  // Inactive groups
-  if (inactiveGroups.rows.length > 0) {
-    lines.push(`\n💤 *Nhóm im lặng > 3 ngày (${inactiveGroups.rows.length}):*`);
-    for (const r of inactiveGroups.rows) {
-      const days = Math.floor((Date.now() - new Date(r.last_msg).getTime()) / 86400000);
-      lines.push(`• ${r.name}: ${days} ngày`);
-    }
+    lines.push(`\n✅ Không có vấn đề nào`);
   }
 
   // Knowledge gap — câu hỏi Sales hay hỏi mà AI chưa trả lời được
@@ -98,7 +78,7 @@ async function buildAlertMessage() {
     lines.push(`→ Cập nhật tài liệu Google Drive để cải thiện.`);
   }
 
-  lines.push(`\n🔗 Dashboard: giftzone-ai.vercel.app`);
+  lines.push(`\n🔗 Dashboard: https://themasterlayer.giftzone.vn/`);
   return lines.join('\n');
 }
 
