@@ -121,7 +121,8 @@ async function parseFile(drive, file) {
   await new Promise((resolve, reject) => {
     drive.files
       .get({ fileId: file.id, alt: 'media' }, { responseType: 'stream' })
-      .then(res => { res.data.pipe(dest); res.data.on('end', resolve); res.data.on('error', reject); });
+      .then(res => { res.data.pipe(dest); res.data.on('end', resolve); res.data.on('error', reject); })
+      .catch(reject);
   });
 
   let text = '';
@@ -216,7 +217,7 @@ export async function startAutoSync() {
     try {
       const res = await drive.changes.list({
         pageToken,
-        fields: 'nextPageToken,newStartPageToken,changes(fileId,file(name,mimeType,trashed))',
+        fields: 'nextPageToken,newStartPageToken,changes(fileId,file(id,name,mimeType,trashed))',
         spaces: 'drive',
       });
 
