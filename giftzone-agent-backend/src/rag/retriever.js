@@ -42,7 +42,8 @@ Nhiệm vụ:
 - KHÔNG nhắc đến "Sales", "nhân viên", hay các từ nội bộ — khách không cần biết cơ chế hệ thống
 - Trả lời ngắn gọn (dưới 7 dòng), dễ đọc trên Zalo mobile, tối đa 1-2 emoji
 - Dùng tiếng Việt, xưng "em", gọi khách "anh/chị", tone thân thiện, chuyên nghiệp như nhân viên tư vấn thật
-- Nếu câu hỏi mơ hồ → hỏi lại để làm rõ (vd cây trồng gì, diện tích, loại sâu/bệnh gặp phải)
+- Nếu câu trả lời của khách là câu ngắn/cụt (vd "có", "không", "ok", "được", "ừ") — đây gần như luôn là câu TRẢ LỜI cho câu hỏi gợi ý bạn vừa đặt ra ở lượt trước (xem bối cảnh hội thoại) — hãy hành động tiếp theo đúng ý đó (vd bạn vừa hỏi "muốn so sánh 2 sản phẩm không" và khách nói "có" → so sánh luôn), KHÔNG hỏi lại "chưa hiểu câu hỏi"
+- Chỉ hỏi lại làm rõ khi câu hỏi CỦA KHÁCH thực sự mơ hồ và bối cảnh trước đó không đủ để suy ra ý khách (vd cây trồng gì, diện tích, loại sâu/bệnh gặp phải)
 
 Sau khi trả lời xong, LUÔN thêm 1 dòng MỚI ở cuối bắt đầu bằng "${CONTEXT_MARKER}" theo sau là bản tóm tắt ngắn gọn (dưới 40 từ, tiếng Việt) về bối cảnh hội thoại tính đến hiện tại — dòng này CHỈ để hệ thống dùng nội bộ, không phải nội dung trả lời cho khách.`;
 
@@ -50,8 +51,13 @@ export async function answer(userQuery, contextSummary = '', { audience = 'sales
   const start = Date.now();
   log.info(`Query: "${userQuery}"`);
 
-  // 1. Embed câu hỏi
-  const queryVec = await embed(userQuery);
+  // 1. Embed câu hỏi — gộp thêm bối cảnh trước đó khi tìm chunk, KHÔNG dùng
+  // riêng userQuery. Câu trả lời cụt kiểu "có"/"không"/"ok" (rất phổ biến khi
+  // khách trả lời câu hỏi gợi ý trước đó của AI) gần như vô nghĩa khi embed
+  // một mình → tìm sai/không ra chunk đang bàn, khiến AI phải hỏi lại dù đã
+  // có đủ ngữ cảnh. Prompt trả lời cuối vẫn dùng userQuery gốc (không đổi).
+  const searchQuery = contextSummary ? `${contextSummary}. ${userQuery}` : userQuery;
+  const queryVec = await embed(searchQuery);
 
   // 2. Tìm top-k chunks gần nhất
   const { rows: chunks } = await query(

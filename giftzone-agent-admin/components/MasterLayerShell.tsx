@@ -1,6 +1,7 @@
 'use client';
 
 import { type ReactNode } from 'react';
+import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
@@ -69,7 +70,9 @@ function DarkSidebar() {
     <aside className="hidden md:flex w-64 shrink-0 flex-col h-screen sticky top-0" style={{ background: INK }}>
       <div className="px-4 pt-5 pb-4" style={{ borderBottom: `1px solid ${BORDER}` }}>
         <div className="flex items-center gap-2.5 mb-4">
-          <div className="w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold text-white" style={{ background: `linear-gradient(135deg, ${ACCENT}, #4f8cff)` }}>G</div>
+          <div className="w-8 h-8 rounded-lg overflow-hidden flex items-center justify-center shrink-0" style={{ background: 'rgba(255,255,255,0.95)' }}>
+            <Image src="/logo.png" alt="GiftZone" width={28} height={28} className="object-contain" unoptimized />
+          </div>
           <div>
             <p className="text-white text-sm font-bold leading-tight">GiftZone</p>
             <p className="text-[11px] leading-tight" style={{ color: '#7b7f8c' }}>AI Controller · Master Layer</p>

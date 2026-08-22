@@ -26,22 +26,26 @@ async function runNegotiationTurn(
   const catalogText = catalog.map(c => `${c.product_name} — ${c.unit}: ${Math.round(c.unit_price).toLocaleString('vi-VN')}đ`).join('\n');
   const itemsText = currentItems.map(it => `${it.qty} ${it.unit} ${it.product_name} @ ${Math.round(it.unit_price).toLocaleString('vi-VN')}đ`).join('\n') || '(chưa có dòng nào)';
 
-  const prompt = `Bạn là trợ lý soạn báo giá nội bộ cho nhân viên Sales của GiftZone (nông dược). Sales sẽ chỉ đạo điều chỉnh báo giá bằng tiếng Việt tự nhiên (vd "giảm 5% cho SP A", "đổi Rầy Diệt sang chai 100g", "bớt số lượng xuống 2").
+  const isEmpty = currentItems.length === 0;
+  const prompt = `Bạn là trợ lý soạn báo giá nội bộ cho nhân viên Sales của GiftZone (nông dược).
 
-Bảng giá CHUẨN (chỉ được dùng đơn giá/quy cách có trong danh sách này, không tự bịa):
+Bảng giá CHUẨN (chỉ được dùng đơn giá/quy cách có trong danh sách này — khớp gần đúng theo tên sản phẩm Sales nhắc tới, không tự bịa sản phẩm/giá không có trong danh sách):
 ${catalogText}
 
 Báo giá hiện tại:
 ${itemsText}
+
+${isEmpty
+    ? `Báo giá đang TRỐNG (chưa có dòng nào) — hãy đọc "Chỉ đạo của Sales" bên dưới như một YÊU CẦU TẠO MỚI báo giá từ đầu: tìm trong đó tên sản phẩm (khớp gần đúng với Bảng giá CHUẨN) và số lượng. Nếu Sales không nói rõ số lượng, dùng số lượng 1 ở quy cách rẻ nhất của sản phẩm đó. Nếu Sales không nhắc sản phẩm nào khớp được với Bảng giá CHUẨN, để "items" là mảng rỗng [] và "reply" hỏi lại tên sản phẩm cụ thể.`
+    : `Sales sẽ chỉ đạo điều chỉnh báo giá đang có bằng tiếng Việt tự nhiên (vd "giảm 5% cho SP A", "đổi sang chai 100g", "bớt số lượng xuống 2", "thêm 10 chai SP B nữa").`}
 
 Chỉ đạo của Sales: "${instruction}"
 
 Áp dụng chỉ đạo, trả về DUY NHẤT 1 JSON object đúng schema sau, không markdown, không chữ nào khác:
 {
   "items": [{"product_name":"...","unit":"...","unit_price":số,"qty":số}],
-  "reply": "1 câu ngắn tiếng Việt xác nhận lại thay đổi cho Sales, dưới 30 từ"
-}
-Nếu chỉ đạo không rõ ràng hoặc không áp dụng được, giữ nguyên "items" như cũ và "reply" hỏi lại Sales cho rõ.`;
+  "reply": "1 câu ngắn tiếng Việt xác nhận lại cho Sales (báo giá vừa tạo/thay đổi gì), dưới 30 từ"
+}`;
 
   try {
     const model = genAI.getGenerativeModel({
@@ -49,7 +53,14 @@ Nếu chỉ đạo không rõ ràng hoặc không áp dụng được, giữ ngu
       generationConfig: { maxOutputTokens: 500, temperature: 0.2 },
     });
     const result = await model.generateContent(prompt);
-    const parsed = JSON.parse(stripFences(result.response.text()));
+    const raw = result.response.text();
+    let parsed;
+    try {
+      parsed = JSON.parse(stripFences(raw));
+    } catch (parseErr) {
+      console.error('[QuoteNegotiation] Gemini trả về không phải JSON hợp lệ:', raw);
+      throw parseErr;
+    }
     const items = Array.isArray(parsed.items)
       ? parsed.items
           .filter((it: any) => it?.product_name && it?.unit && Number.isFinite(Number(it.unit_price)) && Number.isFinite(Number(it.qty)))

@@ -21,9 +21,23 @@ const QUOTE_KEYWORDS = [
   'cho mình xin giá', 'cho em xin giá', 'mua thì giá', 'đặt hàng thì giá', 'đặt mua',
 ];
 
+// Khách gõ trên điện thoại rất hay đặt sai vị trí dấu (vd "gía" thay vì "giá",
+// "trưf" thay vì "trừ") — so khớp CÓ dấu chính xác sẽ trượt hầu hết các câu
+// gõ vội. Bỏ hết dấu (NFD + xoá combining marks, đ/Đ → d/D) trước khi so khớp
+// để chấp nhận sai vị trí dấu, chỉ cần đúng các chữ cái.
+function stripDiacritics(str) {
+  return (str ?? '')
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/Đ/g, 'D');
+}
+
+const QUOTE_KEYWORDS_NORMALIZED = QUOTE_KEYWORDS.map(k => stripDiacritics(k.toLowerCase()));
+
 export function isFormalQuoteIntent(text) {
-  const q = (text ?? '').toLowerCase();
-  return QUOTE_KEYWORDS.some(k => q.includes(k));
+  const q = stripDiacritics((text ?? '').toLowerCase());
+  return QUOTE_KEYWORDS_NORMALIZED.some(k => q.includes(k));
 }
 
 // Tách câu thành từng đoạn — mỗi đoạn thường ứng với 1 sản phẩm (giống quote/assistant.js)

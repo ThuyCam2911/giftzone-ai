@@ -15,6 +15,8 @@ export interface QuoteNegotiation {
   items: QuoteItem[];
   total: number;
   ai_note: string | null;
+  reminder_sent_at: string | null;
+  has_sales_reply: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -55,6 +57,9 @@ export async function ensureQuoteTables() {
       created_at     TIMESTAMPTZ DEFAULT NOW()
     )
   `);
+  // Kanban + nhắc khách (lấy cảm hứng từ demo Sales Pipeline bảo hiểm) — chỉ
+  // thêm ở phía admin, không cần backend ghi cột này
+  await query(`ALTER TABLE quote_negotiations ADD COLUMN IF NOT EXISTS reminder_sent_at TIMESTAMPTZ`);
 }
 
 function parseRow(r: any): QuoteNegotiation {
@@ -62,20 +67,26 @@ function parseRow(r: any): QuoteNegotiation {
     ...r,
     total: Number(r.total ?? 0),
     items: typeof r.items === 'string' ? JSON.parse(r.items) : (r.items ?? []),
+    has_sales_reply: Boolean(r.has_sales_reply),
   };
 }
+
+const SELECT_WITH_FLAGS = `
+  SELECT qn.*,
+    EXISTS(SELECT 1 FROM quote_negotiation_messages m WHERE m.quote_id = qn.id AND m.sender = 'sales') AS has_sales_reply
+  FROM quote_negotiations qn`;
 
 export async function listActiveQuotes(): Promise<QuoteNegotiation[]> {
   await ensureQuoteTables();
   const rows = await query<any>(
-    `SELECT * FROM quote_negotiations WHERE status != 'cancelled' ORDER BY updated_at DESC LIMIT 50`
+    `${SELECT_WITH_FLAGS} WHERE qn.status != 'cancelled' ORDER BY qn.updated_at DESC LIMIT 50`
   );
   return rows.map(parseRow);
 }
 
 export async function getQuote(id: number): Promise<QuoteNegotiation | null> {
   await ensureQuoteTables();
-  const rows = await query<any>(`SELECT * FROM quote_negotiations WHERE id = $1`, [id]);
+  const rows = await query<any>(`${SELECT_WITH_FLAGS} WHERE qn.id = $1`, [id]);
   return rows[0] ? parseRow(rows[0]) : null;
 }
 
@@ -111,6 +122,31 @@ export async function updateQuoteItems(id: number, items: QuoteItem[]): Promise<
     `UPDATE quote_negotiations SET items = $2, total = $3, updated_at = NOW() WHERE id = $1`,
     [id, JSON.stringify(items), total]
   );
+}
+
+// Sales tự sửa tay từng dòng trên form (không qua AI) — lấy cảm hứng từ
+// "Trang tự động báo giá" trong demo Sales Pipeline: Sales luôn có thể chỉnh
+// trực tiếp thay vì chỉ ra lệnh bằng chat tự nhiên (giải quyết case AI không
+// tự trừ % giảm giá vào đơn giá khi Sales gõ "giảm 5%")
+export async function manualUpdateItems(id: number, items: QuoteItem[]): Promise<void> {
+  await updateQuoteItems(id, items);
+  const total = items.reduce((s, it) => s + it.unit_price * it.qty, 0);
+  const lines = items.map(it => `${it.qty} ${it.unit} ${it.product_name} — ${Math.round(it.unit_price * it.qty).toLocaleString('vi-VN')}đ`).join('\n');
+  await addMessage(id, 'sales', `[Đã tự chỉnh báo giá trên form]\n${lines || '(không còn dòng nào)'}\nTổng: ${Math.round(total).toLocaleString('vi-VN')}đ`);
+}
+
+// Nhắc khách bổ sung thông tin còn thiếu (vd chưa rõ sản phẩm/số lượng) — gửi
+// qua Zalo thật bằng đúng hàng đợi outbound_messages đã dùng cho duyệt báo giá
+export async function sendReminder(id: number, missingText: string): Promise<QuoteNegotiation | null> {
+  const quote = await getQuote(id);
+  if (!quote) return null;
+
+  const text = `Dạ anh/chị ơi, để em báo giá chính xác hơn, anh/chị cho em xin thêm thông tin: ${missingText} ạ 🙏`;
+  await query(`INSERT INTO outbound_messages (thread_id, is_direct, text) VALUES ($1, true, $2)`, [quote.customer_uid, text]);
+  await query(`UPDATE quote_negotiations SET reminder_sent_at = NOW() WHERE id = $1`, [id]);
+  await addMessage(id, 'ai', `Đã nhắc khách bổ sung: ${missingText}`);
+
+  return getQuote(id);
 }
 
 export async function approveQuote(id: number): Promise<QuoteNegotiation | null> {

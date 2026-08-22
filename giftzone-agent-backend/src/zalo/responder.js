@@ -12,7 +12,6 @@ import { answer } from '../rag/retriever.js';
 import { handleInternalQuery } from '../ops/assistant.js';
 import { isFormalQuoteIntent, startNegotiation } from '../quote/negotiation.js';
 import { query } from '../utils/db.js';
-import { getConfig } from '../utils/config.js';
 import { createLogger } from '../utils/logger.js';
 import { classifyQuestionType } from '../utils/classify.js';
 
@@ -20,6 +19,13 @@ const log = createLogger('Responder');
 
 const COOLDOWN_MS = 3000;          // chặn spam @mention từ cùng 1 user
 const INTERNAL_CACHE_MS = 5 * 60 * 1000;
+// Ngắn hơn nhiều so với INTERNAL_CACHE_MS — demo_customer_uids thường được
+// chỉnh trực tiếp trên Dashboard ngay trước lúc test/quay demo, KHÔNG đọc
+// qua utils/config.js vì cache của module đó chỉ load 1 lần lúc backend
+// khởi động (không tự refresh khi Dashboard cập nhật DB) — dùng lại giá trị
+// cũ sẽ khiến demo_customer_uids mới lưu không có tác dụng cho tới khi
+// restart lại backend.
+const DEMO_CUSTOMER_CACHE_MS = 30 * 1000;
 
 // Câu chào chung chung (không phải câu hỏi thật) — trả lời nhanh, không chạy RAG
 // (tránh RAG chọn đại 1 tài liệu có độ liên quan thấp làm câu trả lời lạc đề)
@@ -33,6 +39,8 @@ export class MentionResponder {
     this._lastAsk = new Map();       // senderUid → timestamp lần hỏi cuối
     this._internalGroups = new Set();
     this._internalLoadedAt = 0;
+    this._demoCustomerUids = new Set();
+    this._demoCustomerLoadedAt = 0;
   }
 
   async _isAiPaused(threadId) {
@@ -91,7 +99,7 @@ export class MentionResponder {
     // BẮT BUỘC kiểm tra trước nhánh Ops/Sales-quote bên dưới, nếu không
     // opsEligible sẽ đúng (isDirect && isGzMember) và handleInternalQuery sẽ
     // xử lý "báo giá" của khách y như Sales tự hỏi giá cho bản thân.
-    if (isDirect && this._isDemoCustomer(senderUid)) {
+    if (isDirect && await this._isDemoCustomer(senderUid)) {
       return this._handleCustomerFlow({ groupId, senderUid, senderName, isDirect }, userQuery, now);
     }
 
@@ -163,10 +171,24 @@ export class MentionResponder {
   }
 
   // Demo showoff (nhánh ai-for-demo) — xem CLAUDE.md/plan: UID cấu hình qua
-  // Settings ("demo_customer_uids", cách nhau bởi dấu phẩy)
-  _isDemoCustomer(senderUid) {
-    const raw = getConfig('demo_customer_uids', '') ?? '';
-    return raw.split(',').map(s => s.trim()).filter(Boolean).includes(senderUid);
+  // Settings ("demo_customer_uids", cách nhau bởi dấu phẩy). Đọc thẳng từ
+  // bảng settings (KHÔNG qua utils/config.js) vì cache của module đó chỉ
+  // load 1 lần lúc backend khởi động — Dashboard cập nhật xong sẽ không có
+  // tác dụng cho tới khi restart. Cache 30s ở đây để không query DB mỗi tin nhắn.
+  async _loadDemoCustomerUids() {
+    const now = Date.now();
+    if (now - this._demoCustomerLoadedAt < DEMO_CUSTOMER_CACHE_MS) return;
+    this._demoCustomerLoadedAt = now; // set trước để tránh stampede khi DB lỗi
+    try {
+      const { rows } = await query(`SELECT value FROM settings WHERE key = 'demo_customer_uids'`);
+      const raw = rows[0]?.value ?? '';
+      this._demoCustomerUids = new Set(raw.split(',').map(s => s.trim()).filter(Boolean));
+    } catch { /* lỗi DB tạm thời — giữ nguyên danh sách cũ, thử lại sau 30s */ }
+  }
+
+  async _isDemoCustomer(senderUid) {
+    await this._loadDemoCustomerUids();
+    return this._demoCustomerUids.has(senderUid);
   }
 
   // Khách hàng demo hỏi báo giá chính thức → AI báo "đợi chút" rồi đưa đề xuất
