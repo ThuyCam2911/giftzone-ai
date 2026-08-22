@@ -10,7 +10,9 @@ import fs from 'fs';
 import { MessageType } from 'zca-js';
 import { answer } from '../rag/retriever.js';
 import { handleInternalQuery } from '../ops/assistant.js';
+import { isFormalQuoteIntent, startNegotiation } from '../quote/negotiation.js';
 import { query } from '../utils/db.js';
+import { getConfig } from '../utils/config.js';
 import { createLogger } from '../utils/logger.js';
 import { classifyQuestionType } from '../utils/classify.js';
 
@@ -84,6 +86,15 @@ export class MentionResponder {
       return;
     }
 
+    // Demo showoff (nhánh ai-for-demo): UID này CŨNG nằm trong gz_members (chỉ
+    // để qua được internalOnly ở trên), nhưng route như khách hàng bên ngoài —
+    // BẮT BUỘC kiểm tra trước nhánh Ops/Sales-quote bên dưới, nếu không
+    // opsEligible sẽ đúng (isDirect && isGzMember) và handleInternalQuery sẽ
+    // xử lý "báo giá" của khách y như Sales tự hỏi giá cho bản thân.
+    if (isDirect && this._isDemoCustomer(senderUid)) {
+      return this._handleCustomerFlow({ groupId, senderUid, senderName, isDirect }, userQuery, now);
+    }
+
     try {
       // Ops Assistant — trong nhóm internal, HOẶC 1:1 với nhân viên GiftZone (vd hỏi tóm tắt 1 đoạn chat)
       // (dữ liệu vận hành không cho khách thấy — cả 2 điều kiện đều đảm bảo người hỏi là nội bộ)
@@ -147,6 +158,48 @@ export class MentionResponder {
 
     } catch (err) {
       log.error('Pipeline lỗi', err.message);
+      await this._send(groupId, '❌ Có lỗi xảy ra khi xử lý câu hỏi. Vui lòng thử lại sau.', isDirect);
+    }
+  }
+
+  // Demo showoff (nhánh ai-for-demo) — xem CLAUDE.md/plan: UID cấu hình qua
+  // Settings ("demo_customer_uids", cách nhau bởi dấu phẩy)
+  _isDemoCustomer(senderUid) {
+    const raw = getConfig('demo_customer_uids', '') ?? '';
+    return raw.split(',').map(s => s.trim()).filter(Boolean).includes(senderUid);
+  }
+
+  // Khách hàng demo hỏi báo giá chính thức → AI báo "đợi chút" rồi đưa đề xuất
+  // cho Sales duyệt TRÊN DASHBOARD (không qua Zalo, xem quote/negotiation.js).
+  // Câu hỏi thông tin sản phẩm bình thường → RAG với persona khách hàng.
+  async _handleCustomerFlow({ groupId, senderUid, senderName, isDirect }, userQuery, startedAt) {
+    try {
+      if (isFormalQuoteIntent(userQuery)) {
+        const contextSummary = await this._fetchContextSummary(senderUid);
+        await startNegotiation({ customerUid: senderUid, customerName: senderName, rawQuery: userQuery, contextSummary });
+        const waitMsg = 'Dạ để em xin giá chính xác từ bên mình rồi gửi lại anh/chị liền nha, đợi em chút xíu ạ 🙏';
+        await this._send(groupId, waitMsg, isDirect);
+        await this._logAiReply(groupId, waitMsg, userQuery);
+        return;
+      }
+
+      const contextSummary = await this._fetchContextSummary(senderUid);
+      const result = await answer(userQuery, contextSummary, { audience: 'customer' });
+      await this._send(groupId, result.answer, isDirect);
+      await this._saveContextSummary(senderUid, result.context_summary);
+
+      await this._logInteraction({
+        groupId, senderUid,
+        query: userQuery,
+        answer: result.answer,
+        sources: result.sources,
+        latency_ms: Date.now() - startedAt,
+        is_answered: result.is_answered,
+        top_score: result.top_score,
+      });
+      await this._logAiReply(groupId, result.answer, userQuery);
+    } catch (err) {
+      log.error('Customer flow lỗi', err.message);
       await this._send(groupId, '❌ Có lỗi xảy ra khi xử lý câu hỏi. Vui lòng thử lại sau.', isDirect);
     }
   }

@@ -17,6 +17,7 @@ import {
   Sparkles,
   Building2,
   PieChart,
+  ReceiptText,
 } from 'lucide-react';
 import { useLocale } from '@/components/LocaleProvider';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
@@ -32,6 +33,7 @@ const navGroups: NavGroup[] = [
       { href: '/zenterprise/accounts',  labelKey: 'sidebar.zenterpriseAccounts',  icon: Building2 },
       { href: '/zenterprise/live',      labelKey: 'sidebar.zenterpriseLive',      icon: Sparkles },
       { href: '/zenterprise/dashboard', labelKey: 'sidebar.zenterpriseDashboard', icon: PieChart },
+      { href: '/quote-desk',           labelKey: 'sidebar.quoteDesk',            icon: ReceiptText },
     ],
   },
   {

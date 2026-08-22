@@ -32,6 +32,7 @@ function knownKeys(locale: 'vi' | 'en'): Omit<ConfigRow, 'updated_at'>[] {
     { key: 'skip_index',      value: 'false',          description: 'Skip Drive indexing at startup (true/false)' },
     { key: 'log_level',       value: 'info',           description: 'Log level: debug / info / warn / error' },
     { key: 'admin_group_id',  value: '',               description: 'Group ID for the 8:00 AM daily alert (blank = disabled)' },
+    { key: 'demo_customer_uids', value: '',            description: 'Comma-separated Zalo UIDs treated as "demo customer" (ai-for-demo branch only)' },
     { key: 'zalo_cookie',     value: '',               description: 'Zalo cookie JSON — pasted from chat.zalo.me' },
   ] : [
     { key: 'agent_name',      value: 'GiftZone AI',   description: 'Tên hiển thị của AI agent trong Zalo' },
@@ -40,6 +41,7 @@ function knownKeys(locale: 'vi' | 'en'): Omit<ConfigRow, 'updated_at'>[] {
     { key: 'skip_index',      value: 'false',          description: 'Bỏ qua index Drive khi khởi động (true/false)' },
     { key: 'log_level',       value: 'info',           description: 'Mức log: debug / info / warn / error' },
     { key: 'admin_group_id',  value: '',               description: 'Group ID nhận daily alert 8:00 AM (để trống = tắt alert)' },
+    { key: 'demo_customer_uids', value: '',            description: 'UID Zalo (cách nhau bởi dấu phẩy) được coi là "khách hàng demo" (chỉ dùng ở nhánh ai-for-demo)' },
     { key: 'zalo_cookie',     value: '',               description: 'Zalo cookie JSON — paste từ chat.zalo.me' },
   ];
 }

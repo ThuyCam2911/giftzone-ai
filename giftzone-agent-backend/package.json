@@ -8,7 +8,8 @@
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
     "index:drive": "node src/rag/indexer.js",
-    "seed:prices": "node src/scripts/seed-product-prices.js"
+    "seed:prices": "node src/scripts/seed-product-prices.js",
+    "seed:agri-catalog": "node src/scripts/seed-agri-catalog.js"
   },
   "optionalDependencies": {
     "better-sqlite3": "^12.11.1"

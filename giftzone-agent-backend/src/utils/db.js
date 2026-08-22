@@ -98,7 +98,8 @@ export async function initSchema() {
       ('log_level',         $5, 'Mức log: debug / info / warn / error'),
       ('admin_group_id',    '',        'Group ID nhận daily alert 8:00 AM (để trống = tắt alert)'),
       ('session_status',    'unknown', 'Trạng thái Zalo session: ok / warning / expired / unknown'),
-      ('session_last_seen', '',        'Lần cuối session còn sống (ISO timestamp)')
+      ('session_last_seen', '',        'Lần cuối session còn sống (ISO timestamp)'),
+      ('demo_customer_uids', '',       'UID Zalo (cách nhau bởi dấu phẩy) được coi là "khách hàng demo" — vẫn cần nằm trong gz_members để qua được internalOnly, nhưng luồng hội thoại route như khách ngoài, xem responder.js')
     ON CONFLICT (key) DO NOTHING
   `, [
     process.env.DRIVE_FOLDER_ID  ?? '',
@@ -288,6 +289,33 @@ export async function initSchema() {
   await query(`ALTER TABLE pending_quotes ALTER COLUMN product_name DROP NOT NULL`);
   await query(`ALTER TABLE pending_quotes ADD COLUMN IF NOT EXISTS confirmed_items JSONB NOT NULL DEFAULT '[]'`);
   await query(`ALTER TABLE pending_quotes ADD COLUMN IF NOT EXISTS pending_products JSONB NOT NULL DEFAULT '[]'`);
+
+  // Demo showoff (nhánh ai-for-demo): báo giá khách hàng cần Sales duyệt trên
+  // Dashboard trước khi AI gửi lại cho khách qua Zalo. Trao đổi AI⇄Sales chỉ
+  // diễn ra trên Dashboard (không qua Zalo) — xem quote/negotiation.js
+  await query(`
+    CREATE TABLE IF NOT EXISTS quote_negotiations (
+      id            SERIAL PRIMARY KEY,
+      customer_uid  TEXT NOT NULL,
+      customer_name TEXT,
+      status        TEXT NOT NULL DEFAULT 'awaiting_sales',
+      items         JSONB NOT NULL DEFAULT '[]',
+      total         NUMERIC,
+      ai_note       TEXT,
+      created_at    TIMESTAMPTZ DEFAULT NOW(),
+      updated_at    TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await query(`
+    CREATE TABLE IF NOT EXISTS quote_negotiation_messages (
+      id             SERIAL PRIMARY KEY,
+      quote_id       INTEGER NOT NULL REFERENCES quote_negotiations(id) ON DELETE CASCADE,
+      sender         TEXT NOT NULL,
+      text           TEXT NOT NULL,
+      items_snapshot JSONB,
+      created_at     TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
 
   log.info('Schema sẵn sàng ✓');
 }

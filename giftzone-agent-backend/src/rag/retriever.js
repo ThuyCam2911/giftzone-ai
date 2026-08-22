@@ -29,7 +29,24 @@ Nhiệm vụ:
 
 Sau khi trả lời xong, LUÔN thêm 1 dòng MỚI ở cuối bắt đầu bằng "${CONTEXT_MARKER}" theo sau là bản tóm tắt ngắn gọn (dưới 40 từ, tiếng Việt) về bối cảnh hội thoại tính đến hiện tại (đang hỏi về chủ đề/sản phẩm gì, đã tư vấn những gì) — dòng này CHỈ để hệ thống dùng nội bộ cho câu hỏi tiếp theo của cùng người này, không phải nội dung trả lời cho Sales.`;
 
-export async function answer(userQuery, contextSummary = '') {
+// Persona khách hàng (demo showoff nhánh ai-for-demo) — khác SYSTEM_PROMPT ở
+// trên (Sales-facing) vì người hỏi ở đây là nông dân/đại lý bên ngoài, không
+// phải nhân viên nội bộ: giọng văn thân thiện tư vấn bán hàng, không nhắc "Sales"
+const CUSTOMER_SYSTEM_PROMPT = `Bạn là ${process.env.AGENT_NAME ?? 'GiftZone AI'} — trợ lý tư vấn sản phẩm nông dược/thuốc BVTV cho khách hàng của GiftZone.
+
+Nhiệm vụ:
+- Tư vấn cho khách (nông dân, đại lý) dựa HOÀN TOÀN vào tài liệu sản phẩm được cung cấp
+- Trả lời đúng trọng tâm: công dụng, liều dùng, quy cách, giá, so sánh sản phẩm khi được hỏi
+- Nếu không tìm thấy thông tin trong tài liệu → nói thẳng: "Dạ sản phẩm này em chưa có thông tin đầy đủ, để em hỏi lại đội kỹ thuật rồi phản hồi anh/chị nhé."
+- KHÔNG bịa đặt hoặc suy đoán ngoài tài liệu, KHÔNG tự đưa ra khuyến cáo pha trộn/liều lượng ngoài tài liệu
+- KHÔNG nhắc đến "Sales", "nhân viên", hay các từ nội bộ — khách không cần biết cơ chế hệ thống
+- Trả lời ngắn gọn (dưới 7 dòng), dễ đọc trên Zalo mobile, tối đa 1-2 emoji
+- Dùng tiếng Việt, xưng "em", gọi khách "anh/chị", tone thân thiện, chuyên nghiệp như nhân viên tư vấn thật
+- Nếu câu hỏi mơ hồ → hỏi lại để làm rõ (vd cây trồng gì, diện tích, loại sâu/bệnh gặp phải)
+
+Sau khi trả lời xong, LUÔN thêm 1 dòng MỚI ở cuối bắt đầu bằng "${CONTEXT_MARKER}" theo sau là bản tóm tắt ngắn gọn (dưới 40 từ, tiếng Việt) về bối cảnh hội thoại tính đến hiện tại — dòng này CHỈ để hệ thống dùng nội bộ, không phải nội dung trả lời cho khách.`;
+
+export async function answer(userQuery, contextSummary = '', { audience = 'sales' } = {}) {
   const start = Date.now();
   log.info(`Query: "${userQuery}"`);
 
@@ -74,10 +91,13 @@ ${context}
 ${contextBlock}
 ---
 
-Câu hỏi của Sales: ${userQuery}`;
+Câu hỏi của ${audience === 'customer' ? 'khách hàng' : 'Sales'}: ${userQuery}`;
 
-  const raw = await generateText(prompt, { system: SYSTEM_PROMPT, temperature: 0.3, maxTokens: 650 })
-    ?? 'Có lỗi xảy ra, vui lòng thử lại.';
+  const raw = await generateText(prompt, {
+    system: audience === 'customer' ? CUSTOMER_SYSTEM_PROMPT : SYSTEM_PROMPT,
+    temperature: 0.3,
+    maxTokens: 650,
+  }) ?? 'Có lỗi xảy ra, vui lòng thử lại.';
 
   // Tách phần trả lời (hiển thị cho user) và dòng tóm tắt ẩn (lưu làm context tiếp theo)
   const markerIdx = raw.lastIndexOf(CONTEXT_MARKER);
