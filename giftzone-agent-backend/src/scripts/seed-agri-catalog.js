@@ -1,15 +1,26 @@
 /**
- * Seed catalog nông dược/thuốc BVTV MỞ RỘNG cho demo showoff (nhánh ai-for-demo).
+ * Seed catalog nông dược/thuốc BVTV cho demo showoff (nhánh ai-for-demo).
  *
- * ⚠️ TOÀN BỘ tên sản phẩm, hoạt chất, liều dùng, giá đều là DỮ LIỆU GIẢ LẬP cho
- * mục đích ghi hình demo — KHÔNG phải sản phẩm/giá thật của GiftZone hay bất kỳ
- * nhà sản xuất nào. Không dùng làm căn cứ tư vấn kỹ thuật/mua bán thật.
+ * Bối cảnh: "Nông Dược Đồng Xanh" — nhà phân phối cấp 1 khu vực An Giang –
+ * Đồng Tháp, cùng vùng với Lộc Trời (Tập đoàn nông nghiệp lớn nhất khu vực
+ * ĐBSCL, trụ sở An Giang) — khớp với vùng ASM trong các trang demo khác.
+ *
+ * ⚠️ Phân tách rõ 2 loại dữ liệu:
+ * - Tên sản phẩm, hoạt chất, đối tượng phòng trừ, liều dùng: DỮ LIỆU THẬT,
+ *   đang lưu hành hợp pháp tại Việt Nam theo Thông tư 25/2024/TT-BNNPTNT
+ *   (Cục Bảo vệ Thực vật, Bộ NN&PTNT) — nguồn: trang sản phẩm chính thức của
+ *   Syngenta VN / Bayer CropScience VN / Corteva VN và tài liệu khuyến nông.
+ *   KHÔNG bao gồm hoạt chất đã bị cấm (Paraquat, Carbofuran, Methyl Parathion...).
+ * - Quy cách đóng gói và GIÁ: DỮ LIỆU GIẢ LẬP cho mục đích ghi hình demo (giá
+ *   phân phối thật là thông tin thương mại không công khai) — không dùng làm
+ *   căn cứ báo giá/mua bán thật.
+ * - Thời gian cách ly/lưu ý an toàn: chỉ ghi khi có số liệu xác nhận được;
+ *   còn lại ghi "theo khuyến cáo trên nhãn thuốc" thay vì tự suy đoán.
  *
  * Mỗi sản phẩm được:
- * 1. Ghi thành 1 đoạn văn mô tả đầy đủ (hoạt chất, đối tượng phòng trừ, liều
- *    dùng, thời gian cách ly, lưu ý phối trộn/an toàn) → embed + insert vào
- *    doc_chunks (giống hệt cách indexer.js làm với file Drive thật) để RAG
- *    (retriever.js) trả lời được các câu hỏi phức tạp/so sánh sản phẩm.
+ * 1. Ghi thành 1 đoạn văn mô tả đầy đủ → embed + insert vào doc_chunks (giống
+ *    hệt cách indexer.js làm với file Drive thật) để RAG (retriever.js) trả
+ *    lời được các câu hỏi phức tạp/so sánh sản phẩm.
  * 2. Seed giá vào product_prices (bảng quote/generator.js đã dùng) — CÙNG 1
  *    nguồn giá cho cả câu trả lời chat lẫn báo giá cấu trúc, tránh lệch số.
  *
@@ -26,263 +37,164 @@ const FILE_ID = 'demo-agri-catalog';
 const FILE_NAME = 'agri-catalog-demo.md';
 
 const CATALOG = [
+  // ── Thuốc trừ sâu ──────────────────────────────────────────────────────────
   {
-    name: 'Rầy Diệt 200WP', group: 'Thuốc trừ sâu', activeIngredient: 'Imidacloprid 200g/kg',
-    targets: 'Rầy nâu, rầy lưng trắng trên lúa; bọ trĩ trên dưa hấu, dưa lưới',
-    dosage: '10-15g/bình 25 lít, phun ướt đều 2 mặt lá khi rầy tuổi 1-3',
-    phi: '7 ngày', compat: 'Không phối chung với thuốc có tính kiềm mạnh (vôi, Bordeaux).',
-    units: [
-      { unit: 'gói 20g', price: 18000 },
-      { unit: 'gói 100g', price: 78000 },
-      { unit: 'bao 1kg', price: 690000 },
-    ],
+    name: 'Actara 25WG', group: 'Thuốc trừ sâu', activeIngredient: 'Thiamethoxam 250g/kg', manufacturer: 'Syngenta',
+    targets: 'Rầy nâu, rầy lưng trắng, bọ trĩ trên lúa và rau màu',
+    dosage: '20g/bình 25 lít, thuốc nội hấp (systemic) nên hiệu lực kéo dài',
+    phi: 'Theo khuyến cáo trên nhãn thuốc', compat: 'Tuân thủ hướng dẫn phối trộn trên nhãn, không tự ý phối nhiều loại khi chưa có khuyến cáo.',
+    units: [{ unit: 'gói 20g', price: 22000 }, { unit: 'gói 100g', price: 95000 }],
   },
   {
-    name: 'Sâu Cuốn Lá 5EC', group: 'Thuốc trừ sâu', activeIngredient: 'Emamectin benzoate 5%',
-    targets: 'Sâu cuốn lá, sâu đục thân trên lúa; sâu tơ, sâu xanh trên rau họ cải',
-    dosage: '10ml/bình 25 lít, phun khi sâu mới nở, tuổi 1-2 hiệu quả cao nhất',
-    phi: '5 ngày', compat: 'Phối được với hầu hết thuốc trừ bệnh gốc đồng, không phối với thuốc trừ cỏ.',
-    units: [
-      { unit: 'chai 100ml', price: 42000 },
-      { unit: 'chai 500ml', price: 185000 },
-      { unit: 'can 1 lít', price: 340000 },
-    ],
+    name: 'Virtako 40WG', group: 'Thuốc trừ sâu', activeIngredient: 'Chlorantraniliprole 200g/kg + Thiamethoxam 200g/kg', manufacturer: 'Syngenta',
+    targets: 'Sâu cuốn lá, sâu đục thân, rầy nâu trên lúa',
+    dosage: '15–20g/bình 16 lít (75–100g/ha)',
+    phi: '14 ngày', compat: 'Tuân thủ hướng dẫn phối trộn trên nhãn, không tự ý phối nhiều loại khi chưa có khuyến cáo.',
+    units: [{ unit: 'gói 15g', price: 28000 }, { unit: 'gói 100g', price: 175000 }],
   },
   {
-    name: 'Bọ Trĩ Tiêu 480SC', group: 'Thuốc trừ sâu', activeIngredient: 'Spirotetramat 480g/l',
-    targets: 'Bọ trĩ, rệp sáp trên cây có múi (cam, quýt, bưởi); nhện đỏ trên ớt',
-    dosage: '8-10ml/bình 25 lít, phun ướt cả mặt dưới lá',
-    phi: '14 ngày', compat: 'Không phối với dầu khoáng nồng độ cao, dễ gây cháy lá non.',
-    units: [
-      { unit: 'chai 100ml', price: 95000 },
-      { unit: 'chai 250ml', price: 210000 },
-    ],
+    name: 'Karate 2.5EC', group: 'Thuốc trừ sâu', activeIngredient: 'Lambda-cyhalothrin 25g/l', manufacturer: 'Syngenta',
+    targets: 'Sâu cuốn lá, rầy nâu, bọ xít muỗi, bọ trĩ trên lúa và rau',
+    dosage: '10–20ml/bình 16 lít, tiếp xúc + vị độc, hiệu lực nhanh',
+    phi: 'Theo khuyến cáo trên nhãn thuốc', compat: 'Tuân thủ hướng dẫn phối trộn trên nhãn, không tự ý phối nhiều loại khi chưa có khuyến cáo.',
+    units: [{ unit: 'chai 100ml', price: 38000 }, { unit: 'chai 500ml', price: 165000 }],
   },
   {
-    name: 'Sâu Đục Trái 40WG', group: 'Thuốc trừ sâu', activeIngredient: 'Flubendiamide 40%',
-    targets: 'Sâu đục trái trên xoài, ổi, đậu bắp; sâu keo mùa thu trên bắp',
-    dosage: '4-5g/bình 25 lít, phun định kỳ 7 ngày/lần trong giai đoạn ra trái',
-    phi: '3 ngày', compat: 'An toàn với ong và thiên địch nếu phun đúng liều.',
-    units: [
-      { unit: 'gói 10g', price: 32000 },
-      { unit: 'gói 100g', price: 280000 },
-    ],
+    name: 'Chess 50WG', group: 'Thuốc trừ sâu', activeIngredient: 'Pymetrozine 500g/kg', manufacturer: 'Syngenta',
+    targets: 'Rầy nâu, rầy lưng trắng trên lúa',
+    dosage: '25g/bình 16 lít (0.15–0.2kg/ha) — cơ chế ngưng chích hút ngay, không kháng chéo với nhóm neonicotinoid',
+    phi: 'Theo khuyến cáo trên nhãn thuốc', compat: 'Tuân thủ hướng dẫn phối trộn trên nhãn, không tự ý phối nhiều loại khi chưa có khuyến cáo.',
+    units: [{ unit: 'gói 25g', price: 20000 }, { unit: 'gói 100g', price: 72000 }],
   },
   {
-    name: 'Nhện Đỏ Xanh 100SC', group: 'Thuốc trừ sâu', activeIngredient: 'Fenpyroximate 5% + Abamectin 1.8%',
-    targets: 'Nhện đỏ, nhện vàng trên cây có múi, hoa hồng, hoa cúc',
-    dosage: '15ml/bình 25 lít, phun 2 lần cách nhau 5-7 ngày để diệt cả trứng',
-    phi: '10 ngày', compat: 'Không phối với thuốc trừ bệnh gốc lưu huỳnh.',
-    units: [
-      { unit: 'chai 100ml', price: 55000 },
-      { unit: 'chai 500ml', price: 240000 },
-    ],
+    name: 'Regent 800WG', group: 'Thuốc trừ sâu', activeIngredient: 'Fipronil 800g/kg', manufacturer: 'Bayer CropScience',
+    targets: 'Sâu cuốn lá, nhện gié, bọ trĩ trên lúa',
+    dosage: '1.6g/bình 16 lít, phun 2 bình/1.000m²',
+    phi: 'Theo khuyến cáo trên nhãn thuốc', compat: 'Tuân thủ hướng dẫn phối trộn trên nhãn, không tự ý phối nhiều loại khi chưa có khuyến cáo.',
+    units: [{ unit: 'gói 8g', price: 15000 }, { unit: 'gói 100g', price: 160000 }],
   },
   {
-    name: 'Đạo Ôn Chặn 75WP', group: 'Thuốc trừ bệnh', activeIngredient: 'Tricyclazole 75%',
-    targets: 'Bệnh đạo ôn lá và đạo ôn cổ bông trên lúa',
-    dosage: '15-20g/bình 25 lít, phun phòng khi lúa 30-35 ngày và trước trổ 5-7 ngày',
-    phi: '14 ngày', compat: 'Không phối với phân bón lá có chứa đồng, giảm hiệu lực thuốc.',
-    units: [
-      { unit: 'gói 100g', price: 32000 },
-      { unit: 'gói 500g', price: 145000 },
-      { unit: 'bao 1kg', price: 270000 },
-    ],
+    name: 'Confidor 200SL', group: 'Thuốc trừ sâu', activeIngredient: 'Imidacloprid 200g/l', manufacturer: 'Bayer CropScience',
+    targets: 'Rầy, bọ trĩ, rệp sáp, bù lạch trên lúa, rau, cây ăn quả',
+    dosage: '10–20ml/bình 16 lít, thuốc nội hấp, dùng được cả phun lá và xử lý đất',
+    phi: 'Theo khuyến cáo trên nhãn thuốc', compat: 'Tuân thủ hướng dẫn phối trộn trên nhãn, không tự ý phối nhiều loại khi chưa có khuyến cáo.',
+    units: [{ unit: 'chai 100ml', price: 65000 }, { unit: 'chai 500ml', price: 290000 }],
   },
   {
-    name: 'Khô Vằn Sạch 300SC', group: 'Thuốc trừ bệnh', activeIngredient: 'Hexaconazole 5% + Validamycin 3%',
-    targets: 'Bệnh khô vằn, lem lép hạt trên lúa; bệnh gỉ sắt trên cà phê',
-    dosage: '20ml/bình 25 lít, phun khi bệnh mới xuất hiện, lặp lại sau 7 ngày nếu nặng',
-    phi: '7 ngày', compat: 'Có thể phối với thuốc trừ sâu gốc Abamectin.',
-    units: [
-      { unit: 'chai 100ml', price: 38000 },
-      { unit: 'chai 480ml', price: 165000 },
-    ],
+    name: 'Mospilan 3EC', group: 'Thuốc trừ sâu', activeIngredient: 'Acetamiprid 30g/l', manufacturer: 'Nippon Soda',
+    targets: 'Rầy nâu, bọ trĩ trên lúa và rau',
+    dosage: '15–20ml/bình 16 lít',
+    phi: 'Theo khuyến cáo trên nhãn thuốc', compat: 'Tuân thủ hướng dẫn phối trộn trên nhãn, không tự ý phối nhiều loại khi chưa có khuyến cáo.',
+    units: [{ unit: 'chai 100ml', price: 45000 }, { unit: 'chai 500ml', price: 195000 }],
   },
   {
-    name: 'Vàng Lá Thối Rễ 720WP', group: 'Thuốc trừ bệnh', activeIngredient: 'Mancozeb 64% + Metalaxyl 8%',
-    targets: 'Bệnh vàng lá thối rễ, xì mủ trên cây có múi, sầu riêng; bệnh mốc sương trên khoai tây, cà chua',
-    dosage: '30-40g/bình 25 lít phun lá, hoặc 50g/gốc pha tưới gốc phòng thối rễ',
-    phi: '7 ngày', compat: 'Không phối chung với thuốc có tính axit mạnh.',
-    units: [
-      { unit: 'gói 100g', price: 22000 },
-      { unit: 'gói 500g', price: 95000 },
-      { unit: 'bao 1kg', price: 175000 },
-    ],
+    name: 'Padan 95SP', group: 'Thuốc trừ sâu', activeIngredient: 'Cartap hydrochloride 950g/kg', manufacturer: 'UPL',
+    targets: 'Sâu cuốn lá, sâu đục thân trên lúa',
+    dosage: '15g/bình 16 lít (0.3–0.5kg/ha)',
+    phi: 'Theo khuyến cáo trên nhãn thuốc', compat: 'Tuân thủ hướng dẫn phối trộn trên nhãn, không tự ý phối nhiều loại khi chưa có khuyến cáo.',
+    units: [{ unit: 'gói 100g', price: 25000 }, { unit: 'bao 1kg', price: 210000 }],
+  },
+  // ── Thuốc trừ bệnh ─────────────────────────────────────────────────────────
+  {
+    name: 'Amistar Top 325SC', group: 'Thuốc trừ bệnh', activeIngredient: 'Azoxystrobin 200g/l + Difenoconazole 125g/l', manufacturer: 'Syngenta',
+    targets: 'Đốm vằn, lem lép hạt, vàng lá chín sớm trên lúa, cà phê, cao su',
+    dosage: '15–20ml/bình 25 lít — giữ xanh 3 lá trên cùng, kéo dài thời gian quang hợp',
+    phi: '5–10 ngày', compat: 'Tuân thủ hướng dẫn phối trộn trên nhãn, không tự ý phối nhiều loại khi chưa có khuyến cáo.',
+    units: [{ unit: 'chai 100ml', price: 68000 }, { unit: 'chai 500ml', price: 305000 }],
   },
   {
-    name: 'Thán Thư Diệt 250EC', group: 'Thuốc trừ bệnh', activeIngredient: 'Difenoconazole 25%',
-    targets: 'Bệnh thán thư trên xoài, ớt, thanh long; bệnh đốm lá trên rau ăn lá',
-    dosage: '10ml/bình 25 lít, phun định kỳ 10 ngày/lần trong mùa mưa',
-    phi: '7 ngày', compat: 'Phối tốt với phân bón lá vi lượng.',
-    units: [
-      { unit: 'chai 100ml', price: 48000 },
-      { unit: 'chai 500ml', price: 210000 },
-    ],
+    name: 'Tilt Super 300EC', group: 'Thuốc trừ bệnh', activeIngredient: 'Propiconazole 150g/l + Difenoconazole 150g/l', manufacturer: 'Syngenta',
+    targets: 'Lem lép hạt, đốm vằn (khô vằn), vàng lá trên lúa, cà phê, cao su',
+    dosage: '15–20ml/bình 25 lít',
+    phi: 'Theo khuyến cáo trên nhãn thuốc', compat: 'Tuân thủ hướng dẫn phối trộn trên nhãn, không tự ý phối nhiều loại khi chưa có khuyến cáo.',
+    units: [{ unit: 'chai 100ml', price: 42000 }, { unit: 'chai 500ml', price: 185000 }],
   },
   {
-    name: 'Sương Mai Chặn 68WP', group: 'Thuốc trừ bệnh', activeIngredient: 'Chlorothalonil 50% + Metalaxyl-M 18%',
-    targets: 'Bệnh sương mai trên dưa leo, bầu bí, nho; bệnh mốc sương trên cà chua',
-    dosage: '25g/bình 25 lít, phun phòng trước mùa mưa và định kỳ 7 ngày trong mùa mưa',
-    phi: '5 ngày', compat: 'Không phối với thuốc có tính kiềm.',
-    units: [
-      { unit: 'gói 100g', price: 28000 },
-      { unit: 'gói 500g', price: 120000 },
-    ],
+    name: 'Beam 75WP', group: 'Thuốc trừ bệnh', activeIngredient: 'Tricyclazole 750g/kg', manufacturer: 'Corteva',
+    targets: 'Đạo ôn lá và đạo ôn cổ bông trên lúa (Magnaporthe oryzae)',
+    dosage: '40–75g/ha, phun phòng khi lúa 30–35 ngày và trước trổ 5–7 ngày',
+    phi: 'Theo khuyến cáo trên nhãn thuốc', compat: 'Tuân thủ hướng dẫn phối trộn trên nhãn, không tự ý phối nhiều loại khi chưa có khuyến cáo.',
+    units: [{ unit: 'gói 100g', price: 30000 }, { unit: 'gói 500g', price: 135000 }],
   },
   {
-    name: 'Cỏ Sạch Toàn Diện 480SL', group: 'Thuốc trừ cỏ', activeIngredient: 'Glyphosate IPA salt 480g/l',
-    targets: 'Cỏ tranh, cỏ ống, cỏ lá rộng trên đất vườn cây ăn trái, đất trống trước gieo trồng',
-    dosage: '80-100ml/bình 25 lít, phun khi cỏ đang phát triển mạnh, không phun khi sắp mưa',
-    phi: 'Không áp dụng (trừ cỏ trước trồng)', compat: 'Không phun dính lên cây trồng chính, thuốc không chọn lọc.',
-    units: [
-      { unit: 'can 1 lít', price: 75000 },
-      { unit: 'can 5 lít', price: 340000 },
-      { unit: 'thùng 4 can 5 lít', price: 1280000 },
-    ],
+    name: 'Fuji-One 40EC', group: 'Thuốc trừ bệnh', activeIngredient: 'Isoprothiolane 400g/l', manufacturer: 'Nichino (Nihon Nohyaku)',
+    targets: 'Đạo ôn lá và đạo ôn cổ bông trên lúa',
+    dosage: '40–50ml/bình 16 lít (1.0–1.2 lít/ha)',
+    phi: 'Theo khuyến cáo trên nhãn thuốc', compat: 'Tuân thủ hướng dẫn phối trộn trên nhãn, không tự ý phối nhiều loại khi chưa có khuyến cáo.',
+    units: [{ unit: 'chai 100ml', price: 40000 }, { unit: 'chai 480ml', price: 172000 }],
   },
   {
-    name: 'Cỏ Lúa An Toàn 10WP', group: 'Thuốc trừ cỏ', activeIngredient: 'Bensulfuron-methyl 10%',
-    targets: 'Cỏ lồng vực, cỏ chác, rau mác trên ruộng lúa sạ',
-    dosage: '15g/bình 25 lít, phun 5-7 ngày sau sạ khi ruộng đủ ẩm',
-    phi: 'Không hạn chế (chọn lọc, an toàn với lúa)', compat: 'Không phối với phân bón lá có đạm cao ngay sau phun.',
-    units: [
-      { unit: 'gói 25g', price: 12000 },
-      { unit: 'gói 100g', price: 42000 },
-    ],
+    name: 'Validacin 3SL', group: 'Thuốc trừ bệnh', activeIngredient: 'Validamycin A 30g/l (nguồn gốc sinh học/lên men)', manufacturer: 'Đa nhà đăng ký tại VN',
+    targets: 'Đốm vằn (Rhizoctonia solani) trên lúa',
+    dosage: '60–80ml/bình 16 lít',
+    phi: 'Theo khuyến cáo trên nhãn thuốc', compat: 'Tuân thủ hướng dẫn phối trộn trên nhãn, không tự ý phối nhiều loại khi chưa có khuyến cáo.',
+    units: [{ unit: 'chai 240ml', price: 35000 }, { unit: 'chai 1 lít', price: 130000 }],
   },
   {
-    name: 'Cỏ Vườn Chọn Lọc 200EC', group: 'Thuốc trừ cỏ', activeIngredient: 'Quizalofop-P-ethyl 20%',
-    targets: 'Cỏ lá hẹp (cỏ chỉ, cỏ mần trầu) trong vườn rau, đậu, không hại cây lá rộng',
-    dosage: '20ml/bình 25 lít, phun khi cỏ 3-5 lá, tránh phun lên lá cây trồng chính',
-    phi: '7 ngày', compat: 'Không phối với thuốc trừ cỏ lá rộng gốc 2,4-D.',
-    units: [
-      { unit: 'chai 100ml', price: 45000 },
-      { unit: 'chai 480ml', price: 195000 },
-    ],
+    name: 'Anvil 5SC', group: 'Thuốc trừ bệnh', activeIngredient: 'Hexaconazole 50g/l', manufacturer: 'Syngenta',
+    targets: 'Đốm vằn, đạo ôn trên lúa và cây công nghiệp',
+    dosage: '20–25ml/bình 16 lít, thuốc nội hấp phổ rộng',
+    phi: 'Theo khuyến cáo trên nhãn thuốc', compat: 'Tuân thủ hướng dẫn phối trộn trên nhãn, không tự ý phối nhiều loại khi chưa có khuyến cáo.',
+    units: [{ unit: 'chai 100ml', price: 45000 }, { unit: 'chai 500ml', price: 200000 }],
+  },
+  // ── Thuốc trừ cỏ ───────────────────────────────────────────────────────────
+  {
+    name: 'Sofit 300EC', group: 'Thuốc trừ cỏ', activeIngredient: 'Pretilachlor 300g/l + Fenclorim 100g/l (chất an toàn)', manufacturer: 'Syngenta',
+    targets: 'Cỏ mầm, lúa cỏ (Echinochloa, Leptochloa), cỏ lá rộng — tiền nảy mầm trên lúa sạ',
+    dosage: '25–30ml/bình 8 lít, phun trong vòng 0–4 ngày sau sạ — chất an toàn Fenclorim bảo vệ mộng lúa',
+    phi: 'Không áp dụng (xử lý tiền nảy mầm)', compat: 'Không phun trễ hơn khuyến cáo trên nhãn — mộng lúa lớn dễ bị ảnh hưởng.',
+    units: [{ unit: 'chai 500ml', price: 115000 }, { unit: 'can 1 lít', price: 215000 }],
   },
   {
-    name: 'Đa Xanh NPK 30-10-10+TE', group: 'Phân bón lá', activeIngredient: 'N-P-K 30-10-10 + vi lượng Zn, Bo, Mg',
-    targets: 'Kích thích ra đọt, phát triển thân lá cho tất cả cây trồng giai đoạn sinh trưởng',
-    dosage: '25-30g/bình 25 lít, phun định kỳ 7-10 ngày/lần',
-    phi: 'Không áp dụng (phân bón lá)', compat: 'Phối được với hầu hết thuốc trừ sâu bệnh, trừ thuốc có tính kiềm.',
-    units: [
-      { unit: 'gói 100g', price: 20000 },
-      { unit: 'gói 500g', price: 85000 },
-      { unit: 'bao 1kg', price: 155000 },
-    ],
+    name: 'Nominee 10SC', group: 'Thuốc trừ cỏ', activeIngredient: 'Bispyribac-sodium 100g/l', manufacturer: 'Kumiai Chemical / Bayer',
+    targets: 'Cỏ lồng vực, đuôi phụng, cỏ chác, cỏ lá rộng — hậu nảy mầm trên lúa sạ',
+    dosage: '0.4–0.6 lít/ha, phun 7–20 ngày sau sạ — an toàn cho lúa từ giai đoạn mạ non',
+    phi: 'Theo khuyến cáo trên nhãn thuốc', compat: 'Không phối chung với thuốc trừ sâu gốc dầu trong cùng lượt phun nếu nhãn không khuyến cáo.',
+    units: [{ unit: 'chai 240ml', price: 68000 }, { unit: 'chai 1 lít', price: 260000 }],
   },
   {
-    name: 'Đa Xanh Bông Trái 10-55-10', group: 'Phân bón lá', activeIngredient: 'N-P-K 10-55-10 + Bo',
-    targets: 'Kích thích ra hoa đồng loạt, đậu trái trên cây ăn trái, hoa màu',
-    dosage: '20-25g/bình 25 lít, phun trước giai đoạn ra hoa 7-10 ngày',
-    phi: 'Không áp dụng (phân bón lá)', compat: 'Không phối với phân bón có hàm lượng đạm cao cùng lúc.',
-    units: [
-      { unit: 'gói 100g', price: 24000 },
-      { unit: 'gói 500g', price: 100000 },
-    ],
+    name: 'Clincher 10EC', group: 'Thuốc trừ cỏ', activeIngredient: 'Cyhalofop-butyl 100g/l', manufacturer: 'Corteva',
+    targets: 'Cỏ hòa thảo (lồng vực, đuôi phụng, lúa cỏ) trên lúa sạ',
+    dosage: '0.6–0.8 lít/ha, phun 7–18 ngày sau sạ, pha với 320–400 lít nước/ha',
+    phi: 'Theo khuyến cáo trên nhãn thuốc', compat: 'Tuân thủ hướng dẫn phối trộn trên nhãn, không tự ý phối nhiều loại khi chưa có khuyến cáo.',
+    units: [{ unit: 'chai 480ml', price: 105000 }, { unit: 'can 1 lít', price: 210000 }],
   },
   {
-    name: 'Đa Xanh Chắc Hạt 15-5-40', group: 'Phân bón lá', activeIngredient: 'N-P-K 15-5-40 + Canxi, Bo',
-    targets: 'Nuôi hạt, chắc trái, tăng độ ngọt trên lúa giai đoạn trổ, cây ăn trái giai đoạn nuôi trái',
-    dosage: '25g/bình 25 lít, phun 2 lần cách nhau 10 ngày trong giai đoạn nuôi hạt/trái',
-    phi: 'Không áp dụng (phân bón lá)', compat: 'Phối tốt với thuốc trừ bệnh giai đoạn trổ.',
-    units: [
-      { unit: 'gói 100g', price: 22000 },
-      { unit: 'gói 500g', price: 92000 },
-      { unit: 'bao 1kg', price: 165000 },
-    ],
+    name: 'Whip S 7.5EW', group: 'Thuốc trừ cỏ', activeIngredient: 'Fenoxaprop-P-ethyl (kèm chất an toàn)', manufacturer: 'Bayer CropScience',
+    targets: 'Cỏ hòa thảo trên lúa sạ',
+    dosage: '0.75–1.0 lít/ha, hậu nảy mầm sớm — thường phối cùng Nominee để phủ cả cỏ hòa thảo và cỏ lác/lá rộng',
+    phi: 'Theo khuyến cáo trên nhãn thuốc', compat: 'Thường phối cùng thuốc trừ cỏ lác/lá rộng để mở rộng phổ tác dụng, theo đúng khuyến cáo nhãn.',
+    units: [{ unit: 'chai 100ml', price: 55000 }, { unit: 'chai 480ml', price: 235000 }],
+  },
+  // ── Phân bón lá ────────────────────────────────────────────────────────────
+  {
+    name: 'Đầu Trâu MK 501 (NPK 30-15-10)', group: 'Phân bón lá', activeIngredient: 'NPK 30-15-10 + vi lượng', manufacturer: 'Bình Điền Mekong',
+    targets: 'Thúc chồi, kích ra lá, phục hồi cây sau stress trên lúa, rau, cây ăn quả',
+    dosage: '2–3g/1 lít nước, phun định kỳ 7–10 ngày/lần',
+    phi: 'Không áp dụng (phân bón lá)', compat: 'Phối được với hầu hết thuốc BVTV, trừ khi nhãn có lưu ý riêng.',
+    units: [{ unit: 'gói 100g', price: 18000 }, { unit: 'gói 500g', price: 78000 }],
   },
   {
-    name: 'Amino Xanh Rong Biển', group: 'Phân bón lá', activeIngredient: 'Chiết xuất rong biển + Amino acid 15%',
-    targets: 'Giải độc, phục hồi cây sau ngập úng/xịt thuốc liều cao, tăng đề kháng cho tất cả cây trồng',
-    dosage: '25ml/bình 25 lít, phun khi cây có dấu hiệu suy yếu hoặc định kỳ 15 ngày/lần',
-    phi: 'Không áp dụng (phân bón lá hữu cơ)', compat: 'Phối được với hầu hết thuốc BVTV.',
-    units: [
-      { unit: 'chai 100ml', price: 25000 },
-      { unit: 'chai 500ml', price: 105000 },
-      { unit: 'can 1 lít', price: 195000 },
-    ],
+    name: 'MKP 0-52-34 (Mono Potassium Phosphate)', group: 'Phân bón lá', activeIngredient: 'KH₂PO₄ — P₂O₅ 52%, K₂O 34%', manufacturer: 'Haifa',
+    targets: 'Thúc trổ đồng loạt, chắc hạt, tăng trọng lượng hạt trên lúa (giai đoạn trước trổ ~7 ngày)',
+    dosage: '50g/8–10 lít nước, phun 2 lần/vụ',
+    phi: 'Không áp dụng (phân bón lá)', compat: 'Phối được với hầu hết thuốc BVTV, trừ khi nhãn có lưu ý riêng.',
+    units: [{ unit: 'gói 500g', price: 45000 }, { unit: 'bao 1kg', price: 82000 }],
   },
   {
-    name: 'Siêu Ra Rễ Humic', group: 'Phân bón lá', activeIngredient: 'Acid Humic 5% + NAA 0.1%',
-    targets: 'Kích thích ra rễ mới, phục hồi bộ rễ cho cây con, cây sau chiết/ghép, cây bị ngộ độc phân',
-    dosage: '20ml/bình 25 lít tưới gốc, hoặc pha đậm đặc hơn để nhúng bầu cây con',
-    phi: 'Không áp dụng', compat: 'Không phối chung với thuốc trừ cỏ.',
-    units: [
-      { unit: 'chai 100ml', price: 30000 },
-      { unit: 'chai 500ml', price: 125000 },
-    ],
+    name: 'Growmore 20-20-20', group: 'Phân bón lá', activeIngredient: 'NPK cân bằng + vi lượng', manufacturer: 'Growmore International',
+    targets: 'Dinh dưỡng đa dụng, cân bằng cho nhiều loại cây trồng',
+    dosage: '3–5g/1 lít nước, tuỳ giai đoạn sinh trưởng',
+    phi: 'Không áp dụng (phân bón lá)', compat: 'Phối được với hầu hết thuốc BVTV, trừ khi nhãn có lưu ý riêng.',
+    units: [{ unit: 'gói 100g', price: 20000 }, { unit: 'bao 1kg', price: 155000 }],
   },
+  // ── Chất điều hòa sinh trưởng ──────────────────────────────────────────────
   {
-    name: 'Nghịch Vụ Ra Hoa 400SP', group: 'Chất điều hòa sinh trưởng', activeIngredient: 'Paclobutrazol 40%',
-    targets: 'Xử lý ra hoa nghịch vụ trên xoài, sầu riêng; hãm ngọn cho cây kiểng',
-    dosage: 'Tưới gốc 10-15g/gốc pha với 10 lít nước tuỳ tán cây, xử lý khi cây đủ lá già',
-    phi: 'Không áp dụng (xử lý ra hoa)', compat: 'Không phối với phân bón đạm cao cùng thời điểm xử lý.',
-    units: [
-      { unit: 'gói 100g', price: 55000 },
-      { unit: 'gói 500g', price: 240000 },
-    ],
-  },
-  {
-    name: 'Đậu Trái Chống Rụng 10SL', group: 'Chất điều hòa sinh trưởng', activeIngredient: 'Gibberellic acid (GA3) 1%',
-    targets: 'Chống rụng hoa, rụng trái non trên cây có múi, xoài, nho',
-    dosage: '10ml/bình 25 lít, phun giai đoạn đậu trái non, không phun quá liều gây trái dị dạng',
-    phi: '7 ngày', compat: 'Không phối với thuốc trừ cỏ.',
-    units: [
-      { unit: 'chai 20ml', price: 15000 },
-      { unit: 'chai 100ml', price: 62000 },
-    ],
-  },
-  {
-    name: 'Trái To Đều 20WP', group: 'Chất điều hòa sinh trưởng', activeIngredient: 'Cytokinin (6-BA) 20%',
-    targets: 'Kích thích trái to đều, tăng trọng lượng trên dưa hấu, dưa lưới, bầu bí',
-    dosage: '5g/bình 25 lít, phun 2 lần cách nhau 7 ngày giai đoạn trái non',
-    phi: '7 ngày', compat: 'Phối tốt với phân bón lá NPK cân đối.',
-    units: [
-      { unit: 'gói 10g', price: 18000 },
-      { unit: 'gói 100g', price: 155000 },
-    ],
-  },
-  {
-    name: 'Tuyến Trùng Diệt 10GR', group: 'Xử lý đất', activeIngredient: 'Ethoprophos 10%',
-    targets: 'Tuyến trùng hại rễ trên hồ tiêu, cà phê, cây có múi; rệp sáp gốc',
-    dosage: '20-30g/gốc, rải quanh gốc cách thân 20-30cm rồi tưới nước, xử lý đầu và cuối mùa mưa',
-    phi: '30 ngày (thuốc xử lý đất, dạng hạt)', compat: 'Không trộn chung với phân bón trong cùng lượt rải.',
-    units: [
-      { unit: 'gói 1kg', price: 65000 },
-      { unit: 'bao 5kg', price: 290000 },
-    ],
-  },
-  {
-    name: 'Đất Sạch Nấm Bệnh 3SC', group: 'Xử lý đất', activeIngredient: 'Trichoderma spp. 10^8 CFU/g + Chitosan',
-    targets: 'Đối kháng nấm Fusarium, Phytophthora gây thối rễ, xì mủ trên sầu riêng, hồ tiêu, cây có múi',
-    dosage: '30-50ml/gốc pha loãng tưới gốc, xử lý định kỳ 2-3 tháng/lần phòng bệnh',
-    phi: 'Không áp dụng (sinh học)', compat: 'Không phối với thuốc trừ nấm hóa học trong cùng lượt tưới (giảm hiệu lực vi sinh).',
-    units: [
-      { unit: 'chai 500ml', price: 85000 },
-      { unit: 'can 5 lít', price: 720000 },
-    ],
-  },
-  {
-    name: 'Ốc Bươu Vàng Diệt 700WP', group: 'Thuốc trừ ốc', activeIngredient: 'Niclosamide 70%',
-    targets: 'Ốc bươu vàng hại lúa giai đoạn mạ non',
-    dosage: '15-20g/bình 25 lít phun trên mặt ruộng, hoặc rải trực tiếp theo hướng dẫn bao bì khi ruộng có nước',
-    phi: '7 ngày', compat: 'Không phun khi ruộng sắp xả nước ra kênh mương chung.',
-    units: [
-      { unit: 'gói 100g', price: 20000 },
-      { unit: 'gói 500g', price: 85000 },
-    ],
-  },
-  {
-    name: 'Bọ Cánh Cứng Chặn 50WG', group: 'Thuốc trừ sâu', activeIngredient: 'Thiamethoxam 25% + Lambda-cyhalothrin 25%',
-    targets: 'Bọ dừa, bọ cánh cứng hại dừa; rầy chổng cánh trên cây có múi (trung gian truyền bệnh vàng lá gân xanh)',
-    dosage: '5-8g/bình 25 lít, phun ướt đều tán lá, đặc biệt đọt non',
-    phi: '10 ngày', compat: 'Không phối với thuốc trừ bệnh gốc đồng.',
-    units: [
-      { unit: 'gói 10g', price: 15000 },
-      { unit: 'gói 100g', price: 135000 },
-    ],
+    name: 'Atonik 1.8SL', group: 'Chất điều hòa sinh trưởng', activeIngredient: 'Hỗn hợp Sodium ortho-nitrophenolate, para-nitrophenolate, 5-nitroguaiacolate (tổng 1.8%)', manufacturer: 'Asahi Chemical',
+    targets: 'Kích thích nảy mầm, tăng đậu trái, tăng năng suất trên lúa, rau, cây ăn quả',
+    dosage: '10–25ml/bình 16–25 lít tuỳ cây trồng; ngâm hạt giống 5–10ml/10 lít nước',
+    phi: 'Không áp dụng', compat: 'Phối được với hầu hết thuốc BVTV và phân bón lá, trừ khi nhãn có lưu ý riêng.',
+    units: [{ unit: 'chai 25ml', price: 16000 }, { unit: 'chai 100ml', price: 52000 }],
   },
 ];
 
@@ -291,6 +203,7 @@ function buildDescription(p) {
 
 Nhóm sản phẩm: ${p.group}
 Hoạt chất: ${p.activeIngredient}
+Nhà sản xuất/đăng ký: ${p.manufacturer}
 
 Đối tượng phòng trừ / công dụng: ${p.targets}
 
@@ -300,10 +213,10 @@ Thời gian cách ly: ${p.phi}
 
 Lưu ý phối trộn/an toàn: ${p.compat}
 
-Quy cách đóng gói và giá tham khảo:
+Quy cách đóng gói và giá tham khảo (demo):
 ${p.units.map(u => `- ${u.unit}: ${Math.round(u.price).toLocaleString('vi-VN')}đ`).join('\n')}
 
-⚠️ Dữ liệu demo — không phải sản phẩm/giá bán thật.`;
+Ghi chú: hoạt chất/công dụng/liều dùng theo danh mục thuốc BVTV được phép sử dụng tại Việt Nam (Cục Bảo vệ Thực vật, Bộ NN&PTNT). Quy cách đóng gói và giá là số liệu demo minh hoạ, không phải giá phân phối thật.`;
 }
 
 async function seed() {

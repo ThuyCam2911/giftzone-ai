@@ -1,6 +1,6 @@
 export const dynamic = 'force-dynamic';
 
-import Sidebar from '@/components/Sidebar';
+import MasterLayerShell from '@/components/MasterLayerShell';
 import SettingsForm from '@/components/SettingsForm';
 import DriveFoldersManager from '@/components/DriveFoldersManager';
 import { query } from '@/lib/db';
@@ -84,28 +84,21 @@ export default async function SettingsPage() {
   ];
 
   return (
-    <div className="flex min-h-screen bg-gray-50">
-      <Sidebar />
-      <main className="flex-1 overflow-auto min-w-0">
-        <div className="sticky top-0 z-10 bg-gray-50/90 backdrop-blur border-b border-gray-200 px-4 pt-18 pb-3 md:pt-4 md:px-8 md:pb-4">
-          <h1 className="text-lg font-bold text-gray-900">{t('settings.title')}</h1>
-          <p className="text-xs text-gray-500 mt-0.5">{t('settings.subtitle')}</p>
-        </div>
-        <div className="px-4 pb-8 md:px-8 pt-6 max-w-2xl space-y-8">
-          <section>
-            <h2 className="text-sm font-semibold text-gray-700 mb-1">{t('settings.driveFoldersTitle')}</h2>
-            <p className="text-xs text-gray-400 mb-3">
-              {t('settings.driveFoldersSub')}
-            </p>
-            <DriveFoldersManager initial={driveFolders} />
-          </section>
+    <MasterLayerShell title={t('settings.title')} subtitle={t('settings.subtitle')}>
+      <div className="max-w-2xl space-y-8">
+        <section>
+          <h2 className="text-sm font-semibold text-gray-700 mb-1">{t('settings.driveFoldersTitle')}</h2>
+          <p className="text-xs text-gray-400 mb-3">
+            {t('settings.driveFoldersSub')}
+          </p>
+          <DriveFoldersManager initial={driveFolders} />
+        </section>
 
-          <section>
-            <h2 className="text-sm font-semibold text-gray-700 mb-3">{t('settings.agentConfigTitle')}</h2>
-            <SettingsForm rows={merged} />
-          </section>
-        </div>
-      </main>
-    </div>
+        <section>
+          <h2 className="text-sm font-semibold text-gray-700 mb-3">{t('settings.agentConfigTitle')}</h2>
+          <SettingsForm rows={merged} />
+        </section>
+      </div>
+    </MasterLayerShell>
   );
 }
